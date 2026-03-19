@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Kranal Prints">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1d4f91"/>
+      <stop offset="55%" stop-color="#2a74b6"/>
+      <stop offset="100%" stop-color="#2ea7b7"/>
+    </linearGradient>
+    <linearGradient id="paper" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="1"/>
+      <stop offset="100%" stop-color="#dff4ff" stop-opacity="1"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="2" y="2" width="60" height="60" rx="14" fill="url(#bg)"/>
+  <rect x="14" y="16" width="36" height="18" rx="5" fill="#123863"/>
+  <rect x="10" y="28" width="44" height="18" rx="5" fill="#0f3158"/>
+  <rect x="16" y="35" width="32" height="13" rx="3" fill="url(#paper)"/>
+  <rect x="20" y="38" width="24" height="2.5" rx="1.2" fill="#7aa8d3"/>
+  <rect x="20" y="42" width="18" height="2.5" rx="1.2" fill="#9bc0e2"/>
+  <circle cx="46" cy="25" r="2.7" fill="#61d7d5"/>
+  <path d="M22 21h12" stroke="#5c90c1" stroke-width="2.2" stroke-linecap="round"/>
+</svg>

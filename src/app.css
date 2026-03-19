@@ -1,0 +1,33 @@
+body {
+  margin: 0;
+  background: #f8fbff;
+  font-family: "Segoe UI", "Inter", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+.crm-shell {
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 16px;
+  background: linear-gradient(180deg, #ffffff 0%, #f9fbff 100%);
+  min-height: calc(100vh - 130px);
+}
+
+.crm-loader {
+  min-height: 340px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.crm-stat-card {
+  border: 1px solid #dbeafe;
+  background: linear-gradient(165deg, #ffffff 0%, #f0f7ff 100%);
+}
+
+.ant-menu-item-selected {
+  font-weight: 600;
+}
