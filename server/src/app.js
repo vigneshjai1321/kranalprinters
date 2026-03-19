@@ -25,7 +25,13 @@ export function createApp(db) {
   };
 
   app.use(cors({
-    origin: env.clientOrigin,
+    origin(origin, callback) {
+      // Allow same-origin/server requests and trusted UI origins.
+      if (!origin) return callback(null, true);
+      if (origin === env.clientOrigin) return callback(null, true);
+      if (origin.endsWith(".vercel.app")) return callback(null, true);
+      return callback(new Error("CORS origin not allowed"));
+    },
     credentials: false,
   }));
   app.use(express.json({ limit: "4mb" }));
