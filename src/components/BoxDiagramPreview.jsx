@@ -326,6 +326,7 @@ export default function BoxDiagramPreview({
     if (!current) return;
 
     if (dragRef.current.kind === "drawing") {
+      dragRef.current.current = current;
       setDraftShape(prev => ({ ...prev, current }));
       return;
     }
@@ -401,17 +402,17 @@ export default function BoxDiagramPreview({
       const { tool, start, current } = dragRef.current;
       if (tool === "line") {
         const len = Math.hypot(current.x - start.x, current.y - start.y);
-        if (len > 0.02) {
+        if (len > 0.005) {
           let type = "slanted";
           let x1 = start.x;
           let y1 = start.y;
           let x2 = current.x;
           let y2 = current.y;
 
-          if (Math.abs(current.x - start.x) < 0.02) {
+          if (Math.abs(current.x - start.x) < 0.01) {
             type = "vertical";
             x1 = x2;
-          } else if (Math.abs(current.y - start.y) < 0.02) {
+          } else if (Math.abs(current.y - start.y) < 0.01) {
             type = "horizontal";
             y1 = y2;
           }
@@ -423,7 +424,7 @@ export default function BoxDiagramPreview({
       } else if (tool === "box") {
         const w = Math.abs(current.x - start.x);
         const h = Math.abs(current.y - start.y);
-        if (w > 0.02 && h > 0.02) {
+        if (w > 0.005 && h > 0.005) {
           const finalBox = normalizeBox({
             id: `box_${Date.now()}`,
             x: Math.min(start.x, current.x),

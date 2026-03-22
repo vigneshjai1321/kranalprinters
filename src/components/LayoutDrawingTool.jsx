@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button, Card, Input, InputNumber, Space, Typography, Divider } from "antd";
-import { DeleteOutlined, FontSizeOutlined, LineOutlined, ReloadOutlined, DragOutlined, BorderOutlined } from "@ant-design/icons";
+import { DeleteOutlined, FontSizeOutlined, LineOutlined, ReloadOutlined, DragOutlined, BorderOutlined, EditOutlined } from "@ant-design/icons";
+import PencilTool from "./PencilTool";
 
 const { Text } = Typography;
 
@@ -329,6 +330,7 @@ export default function LayoutDrawingTool({
     if (!current) return;
 
     if (dragRef.current.kind === "drawing") {
+      dragRef.current.current = current;
       setDraftShape(prev => ({ ...prev, current }));
       return;
     }
@@ -420,7 +422,7 @@ export default function LayoutDrawingTool({
       const { tool, start, current } = dragRef.current;
       if (tool === "line") {
         const len = Math.hypot(current.x - start.x, current.y - start.y);
-        if (len > 0.02) {
+        if (len > 0.005) {
           let type = "slanted";
           let x1 = start.x;
           let y1 = start.y;
@@ -428,10 +430,10 @@ export default function LayoutDrawingTool({
           let y2 = current.y;
 
           // Optional edge snapping for very straight drags
-          if (Math.abs(current.x - start.x) < 0.02) {
+          if (Math.abs(current.x - start.x) < 0.01) {
             type = "vertical";
             x1 = x2;
-          } else if (Math.abs(current.y - start.y) < 0.02) {
+          } else if (Math.abs(current.y - start.y) < 0.01) {
             type = "horizontal";
             y1 = y2;
           }
@@ -447,7 +449,7 @@ export default function LayoutDrawingTool({
       } else if (tool === "box") {
         const w = Math.abs(current.x - start.x);
         const h = Math.abs(current.y - start.y);
-        if (w > 0.02 && h > 0.02) {
+        if (w > 0.005 && h > 0.005) {
           const finalBox = normalizeBox({
             id: `box_${Date.now()}`,
             x: Math.min(start.x, current.x),
@@ -613,7 +615,7 @@ export default function LayoutDrawingTool({
         )}
       </div>
 
-      <div className="diagram-canvas-wrap" style={{ cursor: activeTool === 'select' ? 'default' : 'crosshair', marginTop: 12 }}>
+      <div className="diagram-canvas-wrap" style={{ position: 'relative', cursor: activeTool === 'select' ? 'default' : 'crosshair', marginTop: 12 }}>
         <svg
           ref={svgRef}
           viewBox={`0 0 ${SVG_VIEWBOX.width} ${SVG_VIEWBOX.height}`}
@@ -731,6 +733,7 @@ export default function LayoutDrawingTool({
             Cutting Size: {sheet.cuttingSize}
           </text>
         </svg>
+        <PencilTool isActive={activeTool === 'pencil'} viewBoxWidth={SVG_VIEWBOX.width} viewBoxHeight={SVG_VIEWBOX.height} />
       </div>
     </Card>
   );
@@ -741,6 +744,9 @@ function SelectLineType({ value, onChange, disabled }) {
     <div className="diagram-line-type" style={{ display: 'flex', gap: 4 }}>
       <button type="button" className={value === "select" ? "active" : ""} onClick={() => onChange("select")} disabled={disabled} style={{ background: value==='select'?'#e6f7ff':'', border: value==='select'?'1px solid #1890ff':'1px solid #d9d9d9', padding: '4px 12px', borderRadius: 4, cursor: 'pointer' }}>
         <DragOutlined style={{ marginRight: 6 }}/> Select/Move
+      </button>
+      <button type="button" className={value === "pencil" ? "active" : ""} onClick={() => onChange("pencil")} disabled={disabled} style={{ background: value==='pencil'?'#e6f7ff':'', border: value==='pencil'?'1px solid #1890ff':'1px solid #d9d9d9', padding: '4px 12px', borderRadius: 4, cursor: 'pointer' }}>
+        <EditOutlined style={{ marginRight: 6 }} /> Pencil
       </button>
       <button type="button" className={value === "line" ? "active" : ""} onClick={() => onChange("line")} disabled={disabled} style={{ background: value==='line'?'#e6f7ff':'', border: value==='line'?'1px solid #1890ff':'1px solid #d9d9d9', padding: '4px 12px', borderRadius: 4, cursor: 'pointer' }}>
         <LineOutlined style={{ marginRight: 6 }} /> Draw Line
