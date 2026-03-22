@@ -98,11 +98,12 @@ function normalizeBox(box) {
 
 function createDefaultLayout(sheet) {
   return {
-    version: 2,
+    version: 1,
     sheet,
     lines: [],
     labels: [],
     boxes: [],
+    paths: [],
   };
 }
 
@@ -112,6 +113,7 @@ function clampLayout(layout) {
     lines: (layout.lines || []).map((line) => normalizeLine(line)),
     labels: (layout.labels || []).map((label) => normalizeLabel(label)),
     boxes: (layout.boxes || []).map((box) => normalizeBox(box)),
+    paths: layout.paths || [],
   };
 }
 
@@ -151,6 +153,13 @@ function areLayoutsEqual(left, right) {
     const a = leftBoxes[i];
     const b = rightBoxes[i];
     if (a.id !== b.id || a.x !== b.x || a.y !== b.y || a.w !== b.w || a.h !== b.h) return false;
+  }
+
+  const leftPaths = left.paths || [];
+  const rightPaths = right.paths || [];
+  if (leftPaths.length !== rightPaths.length) return false;
+  for (let i = 0; i < leftPaths.length; i++) {
+    if (leftPaths[i] !== rightPaths[i]) return false;
   }
 
   return true;
@@ -581,39 +590,51 @@ export default function LayoutDrawingTool({
         </div>
 
         {selectedItemData && selectedItem.kind === "box" && (
-           <div className="diagram-toolbar-row" style={{ backgroundColor: '#f0f5ff', padding: 8, borderRadius: 4 }}>
-             <Text strong>Selected Box Dimensions :</Text>
-             <Space>
-               <Text>Width:</Text>
-               <InputNumber size="small" step={0.1} value={Number.isFinite(selectedItemData.w) ? Number((selectedItemData.w * sheet.width).toFixed(2)) : 0} onChange={(v) => updateSelectedBox('w', v)} />
-               <Text>Breadth/Height:</Text>
-               <InputNumber size="small" step={0.1} value={Number.isFinite(selectedItemData.h) ? Number((selectedItemData.h * sheet.height).toFixed(2)) : 0} onChange={(v) => updateSelectedBox('h', v)} />
-               <Text>X Pos:</Text>
-               <InputNumber size="small" step={0.1} value={Number.isFinite(selectedItemData.x) ? Number((selectedItemData.x * sheet.width).toFixed(2)) : 0} onChange={(v) => updateSelectedBox('x', v)} />
-               <Text>Y Pos:</Text>
-               <InputNumber size="small" step={0.1} value={Number.isFinite(selectedItemData.y) ? Number((selectedItemData.y * sheet.height).toFixed(2)) : 0} onChange={(v) => updateSelectedBox('y', v)} />
-             </Space>
+           <div className="diagram-toolbar-row" style={{ backgroundColor: '#f0f5ff', padding: '12px 16px', borderRadius: 4, display: 'flex', flexDirection: 'column', gap: 8 }}>
+             <Text strong style={{ whiteSpace: 'nowrap' }}>Selected Box Dimensions:</Text>
+             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 16px', alignItems: 'center' }}>
+               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                 <Text style={{ whiteSpace: 'nowrap' }}>Width:</Text>
+                 <InputNumber size="small" step={0.1} style={{ width: 80 }} value={Number.isFinite(selectedItemData.w) ? Number((selectedItemData.w * sheetWidth).toFixed(2)) : 0} onChange={(v) => updateSelectedBox('w', v)} />
+               </div>
+               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                 <Text style={{ whiteSpace: 'nowrap' }}>Breadth/Height:</Text>
+                 <InputNumber size="small" step={0.1} style={{ width: 80 }} value={Number.isFinite(selectedItemData.h) ? Number((selectedItemData.h * sheetHeight).toFixed(2)) : 0} onChange={(v) => updateSelectedBox('h', v)} />
+               </div>
+               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                 <Text style={{ whiteSpace: 'nowrap' }}>X Pos:</Text>
+                 <InputNumber size="small" step={0.1} style={{ width: 80 }} value={Number.isFinite(selectedItemData.x) ? Number((selectedItemData.x * sheetWidth).toFixed(2)) : 0} onChange={(v) => updateSelectedBox('x', v)} />
+               </div>
+               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                 <Text style={{ whiteSpace: 'nowrap' }}>Y Pos:</Text>
+                 <InputNumber size="small" step={0.1} style={{ width: 80 }} value={Number.isFinite(selectedItemData.y) ? Number((selectedItemData.y * sheetHeight).toFixed(2)) : 0} onChange={(v) => updateSelectedBox('y', v)} />
+               </div>
+             </div>
            </div>
         )}
         
         {selectedItemData && selectedItem.kind === "line" && (
-          <div className="diagram-toolbar-row" style={{ backgroundColor: '#f0f5ff', padding: 8, borderRadius: 4 }}>
-             <Text strong>Selected Line Settings :</Text>
-             <Space>
-               <Text>Length:</Text>
-               <InputNumber size="small" step={0.1} 
-                 value={(() => {
-                   const val = Math.hypot((selectedItemData.x2 - selectedItemData.x1) * sheet.width, (selectedItemData.y2 - selectedItemData.y1) * sheet.height);
-                   return Number.isFinite(val) ? Number(val.toFixed(2)) : 0;
-                 })()} 
-                 onChange={(v) => updateSelectedLine('len', v)} />
-               
-               <Text>X Pos:</Text>
-               <InputNumber size="small" step={0.1} value={Number.isFinite(selectedItemData.x1) ? Number((Math.min(selectedItemData.x1, selectedItemData.x2) * sheet.width).toFixed(2)) : 0} onChange={(v) => updateSelectedLine('x', v)} />
-                 
-               <Text>Y Pos:</Text>
-               <InputNumber size="small" step={0.1} value={Number.isFinite(selectedItemData.y1) ? Number((Math.min(selectedItemData.y1, selectedItemData.y2) * sheet.height).toFixed(2)) : 0} onChange={(v) => updateSelectedLine('y', v)} />
-             </Space>
+           <div className="diagram-toolbar-row" style={{ backgroundColor: '#f0f5ff', padding: '12px 16px', borderRadius: 4, display: 'flex', flexDirection: 'column', gap: 8 }}>
+             <Text strong style={{ whiteSpace: 'nowrap' }}>Selected Line Settings:</Text>
+             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 16px', alignItems: 'center' }}>
+               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                 <Text style={{ whiteSpace: 'nowrap' }}>Length:</Text>
+                 <InputNumber size="small" step={0.1} style={{ width: 80 }} 
+                   value={(() => {
+                     const val = Math.hypot((selectedItemData.x2 - selectedItemData.x1) * sheetWidth, (selectedItemData.y2 - selectedItemData.y1) * sheetHeight);
+                     return Number.isFinite(val) ? Number(val.toFixed(2)) : 0;
+                   })()} 
+                   onChange={(v) => updateSelectedLine('len', v)} />
+               </div>
+               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                 <Text style={{ whiteSpace: 'nowrap' }}>X Pos:</Text>
+                 <InputNumber size="small" step={0.1} style={{ width: 80 }} value={Number.isFinite(selectedItemData.x1) ? Number((Math.min(selectedItemData.x1, selectedItemData.x2) * sheetWidth).toFixed(2)) : 0} onChange={(v) => updateSelectedLine('x', v)} />
+               </div>
+               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                 <Text style={{ whiteSpace: 'nowrap' }}>Y Pos:</Text>
+                 <InputNumber size="small" step={0.1} style={{ width: 80 }} value={Number.isFinite(selectedItemData.y1) ? Number((Math.min(selectedItemData.y1, selectedItemData.y2) * sheetHeight).toFixed(2)) : 0} onChange={(v) => updateSelectedLine('y', v)} />
+               </div>
+             </div>
            </div>
         )}
       </div>
@@ -736,7 +757,13 @@ export default function LayoutDrawingTool({
             Cutting Size: {sheet.cuttingSize}
           </text>
         </svg>
-        <PencilTool isActive={activeTool === 'pencil'} viewBoxWidth={SVG_VIEWBOX.width} viewBoxHeight={SVG_VIEWBOX.height} />
+        <PencilTool 
+          isActive={activeTool === 'pencil'} 
+          viewBoxWidth={SVG_VIEWBOX.width} 
+          viewBoxHeight={SVG_VIEWBOX.height} 
+          paths={layout?.paths || []}
+          onPathsChange={(newPaths) => setLayoutSafe(prev => ({ ...prev, paths: newPaths }))}
+        />
       </div>
     </Card>
   );

@@ -1,7 +1,6 @@
 import React, { useState, useRef } from 'react';
 
-export default function PencilTool({ isActive, viewBoxWidth = 760, viewBoxHeight = 480 }) {
-  const [paths, setPaths] = useState([]);
+export default function PencilTool({ isActive, viewBoxWidth = 760, viewBoxHeight = 480, paths = [], onPathsChange }) {
   const [currentPath, setCurrentPath] = useState(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const svgRef = useRef(null);
@@ -41,7 +40,7 @@ export default function PencilTool({ isActive, viewBoxWidth = 760, viewBoxHeight
     if (!isDrawing) return;
     
     if (currentPath) {
-      setPaths((prev) => [...prev, currentPath]);
+      if (onPathsChange) onPathsChange([...paths, currentPath]);
     }
     setCurrentPath(null);
     setIsDrawing(false);
