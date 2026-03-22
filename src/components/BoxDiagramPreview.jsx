@@ -459,7 +459,8 @@ export default function BoxDiagramPreview({
   }, [layout, selectedItem]);
 
   const updateSelectedBox = (key, value) => {
-    const val = clamp(value / (key === 'w' || key === 'x' ? sheet.width : sheet.height));
+    if (value == null || !Number.isFinite(Number(value))) return;
+    const val = clamp(Number(value) / (key === 'w' || key === 'x' ? sheet.width : sheet.height));
     setLayoutSafe((prev) => ({
       ...prev,
       boxes: prev.boxes.map(b => b.id === selectedItem.id ? { ...b, [key]: val } : b)
@@ -467,8 +468,10 @@ export default function BoxDiagramPreview({
   };
 
   const updateSelectedLine = (key, value) => {
-    const valX = clamp(value / sheet.width);
-    const valY = clamp(value / sheet.height);
+    if (value == null || !Number.isFinite(Number(value))) return;
+    const valNum = Number(value);
+    const valX = clamp(valNum / sheet.width);
+    const valY = clamp(valNum / sheet.height);
     setLayoutSafe((prev) => ({
       ...prev,
       lines: prev.lines.map(l => {
@@ -486,7 +489,7 @@ export default function BoxDiagramPreview({
            const dy = (l.y2 - l.y1) * sheet.height;
            const currLen = Math.hypot(dx, dy);
            if (currLen < 0.001) return l;
-           const scale = value / currLen;
+           const scale = valNum / currLen;
            const midX = (l.x1 + l.x2) / 2;
            const midY = (l.y1 + l.y2) / 2;
            const halfDx = ((l.x2 - l.x1) * scale) / 2;
@@ -539,13 +542,13 @@ export default function BoxDiagramPreview({
              <Text strong>Selected Box Dimensions :</Text>
              <Space>
                <Text>Width:</Text>
-               <InputNumber size="small" step={0.1} value={Number((selectedItemData.w * sheet.width).toFixed(2))} onChange={(v) => updateSelectedBox('w', v)} />
+               <InputNumber size="small" step={0.1} value={Number.isFinite(selectedItemData.w) ? Number((selectedItemData.w * sheet.width).toFixed(2)) : 0} onChange={(v) => updateSelectedBox('w', v)} />
                <Text>Breadth/Height:</Text>
-               <InputNumber size="small" step={0.1} value={Number((selectedItemData.h * sheet.height).toFixed(2))} onChange={(v) => updateSelectedBox('h', v)} />
+               <InputNumber size="small" step={0.1} value={Number.isFinite(selectedItemData.h) ? Number((selectedItemData.h * sheet.height).toFixed(2)) : 0} onChange={(v) => updateSelectedBox('h', v)} />
                <Text>X Pos:</Text>
-               <InputNumber size="small" step={0.1} value={Number((selectedItemData.x * sheet.width).toFixed(2))} onChange={(v) => updateSelectedBox('x', v)} />
+               <InputNumber size="small" step={0.1} value={Number.isFinite(selectedItemData.x) ? Number((selectedItemData.x * sheet.width).toFixed(2)) : 0} onChange={(v) => updateSelectedBox('x', v)} />
                <Text>Y Pos:</Text>
-               <InputNumber size="small" step={0.1} value={Number((selectedItemData.y * sheet.height).toFixed(2))} onChange={(v) => updateSelectedBox('y', v)} />
+               <InputNumber size="small" step={0.1} value={Number.isFinite(selectedItemData.y) ? Number((selectedItemData.y * sheet.height).toFixed(2)) : 0} onChange={(v) => updateSelectedBox('y', v)} />
              </Space>
            </div>
         )}
@@ -556,15 +559,15 @@ export default function BoxDiagramPreview({
              <Space>
                <Text>Length:</Text>
                <InputNumber size="small" step={0.1} 
-                 value={Number(Math.hypot(
-                   (selectedItemData.x2 - selectedItemData.x1) * sheet.width, 
-                   (selectedItemData.y2 - selectedItemData.y1) * sheet.height
-                 ).toFixed(2))} 
+                 value={(() => {
+                   const val = Math.hypot((selectedItemData.x2 - selectedItemData.x1) * sheet.width, (selectedItemData.y2 - selectedItemData.y1) * sheet.height);
+                   return Number.isFinite(val) ? Number(val.toFixed(2)) : 0;
+                 })()} 
                  onChange={(v) => updateSelectedLine('len', v)} />
                <Text>X Pos:</Text>
-               <InputNumber size="small" step={0.1} value={Number((Math.min(selectedItemData.x1, selectedItemData.x2) * sheet.width).toFixed(2))} onChange={(v) => updateSelectedLine('x', v)} />
+               <InputNumber size="small" step={0.1} value={Number.isFinite(selectedItemData.x1) ? Number((Math.min(selectedItemData.x1, selectedItemData.x2) * sheet.width).toFixed(2)) : 0} onChange={(v) => updateSelectedLine('x', v)} />
                <Text>Y Pos:</Text>
-               <InputNumber size="small" step={0.1} value={Number((Math.min(selectedItemData.y1, selectedItemData.y2) * sheet.height).toFixed(2))} onChange={(v) => updateSelectedLine('y', v)} />
+               <InputNumber size="small" step={0.1} value={Number.isFinite(selectedItemData.y1) ? Number((Math.min(selectedItemData.y1, selectedItemData.y2) * sheet.height).toFixed(2)) : 0} onChange={(v) => updateSelectedLine('y', v)} />
              </Space>
            </div>
         )}
