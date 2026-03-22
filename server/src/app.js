@@ -26,15 +26,16 @@ export function createApp(db) {
 
   app.use(cors({
     origin(origin, callback) {
-      // Allow same-origin/server requests and trusted UI origins.
       if (!origin) return callback(null, true);
       if (origin === env.clientOrigin) return callback(null, true);
+      if (origin.startsWith("http://localhost:")) return callback(null, true);
       if (origin.endsWith(".vercel.app")) return callback(null, true);
-      return callback(new Error("CORS origin not allowed"));
+      return callback(new Error("CORS origin not allowed: " + origin));
     },
     credentials: false,
   }));
-  app.use(express.json({ limit: "4mb" }));
+  app.use(express.json({ limit: "50mb" }));
+  app.use(express.urlencoded({ limit: "50mb", extended: true }));
   app.use("/api", createApiRouter(controllers));
   app.use(errorHandler);
 

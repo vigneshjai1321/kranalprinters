@@ -12,7 +12,10 @@ export default function PencilTool({ isActive, viewBoxWidth = 760, viewBoxHeight
     pt.x = e.clientX;
     pt.y = e.clientY;
     const cursor = pt.matrixTransform(svg.getScreenCTM().inverse());
-    return { x: cursor.x, y: cursor.y };
+    return { 
+      x: Math.round(cursor.x * 10) / 10, 
+      y: Math.round(cursor.y * 10) / 10 
+    };
   };
 
   const startDrawing = (e) => {
