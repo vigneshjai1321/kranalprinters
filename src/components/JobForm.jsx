@@ -311,6 +311,14 @@ export default function JobForm({
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState("");
   const [layoutJson, setLayoutJson] = useState(null);
 
+  // Use useCallback to stabilize the callback reference
+  const handleLayoutChange = useCallback(
+    (nextLayout) => {
+      setLayoutJson((prevLayout) => (areJsonEqual(prevLayout, nextLayout) ? prevLayout : nextLayout));
+    },
+    []
+  );
+
   const isEdit = mode === "edit";
   const isDuplicate = mode === "duplicate";
   const isReadOnly = mode === "view";
@@ -913,9 +921,7 @@ export default function JobForm({
                 onHeightChange={(value) => form.setFieldsValue({ size_h: value })}
                 onCuttingSizeChange={(value) => form.setFieldsValue({ cutting_size: value })}
                 initialLayout={layoutJson}
-                onLayoutChange={(nextLayout) => {
-                  setLayoutJson((prevLayout) => (areJsonEqual(prevLayout, nextLayout) ? prevLayout : nextLayout));
-                }}
+                onLayoutChange={handleLayoutChange}
                 disabled={isReadOnly}
               />
 

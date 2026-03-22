@@ -37,6 +37,6 @@ export function errorHandler(error, _req, res, _next) {
   return res.status(500).json({
     message: "Server error while processing request.",
     code: "INTERNAL_SERVER_ERROR",
-    details: env.nodeEnv === "production" ? undefined : error?.message || "Unknown error",
+    details: env.nodeEnv === "production" ? undefined : error?.stack || error?.message || "Unknown error",
   });
 }

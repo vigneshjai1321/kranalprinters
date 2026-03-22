@@ -244,15 +244,21 @@ export default function BoxDiagramPreview({
     };
 
     setLayout((prev) => {
-      if (areLayoutsEqual(prev, nextLayout)) return prev;
+      // Avoid overwriting local state if it's already matches parent initial prop
+      if (prev && areLayoutsEqual(prev, nextLayout)) return prev;
       return nextLayout;
     });
   }, [initialLayout, sheet]);
 
+  const onLayoutChangeRef = useRef(onLayoutChange);
+  useEffect(() => {
+    onLayoutChangeRef.current = onLayoutChange;
+  }, [onLayoutChange]);
+
   useEffect(() => {
     if (!layout) return;
-    onLayoutChange?.(layout);
-  }, [layout, onLayoutChange]);
+    onLayoutChangeRef.current?.(layout);
+  }, [layout]);
 
   const svgPointToNormalized = (event) => {
     if (!svgRef.current) return null;

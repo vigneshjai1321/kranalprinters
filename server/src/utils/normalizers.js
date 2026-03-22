@@ -7,7 +7,7 @@ export function toArray(value) {
 export function normalizeJob(job) {
   if (!job || typeof job !== "object") return job;
 
-  return {
+  const normalized = {
     ...job,
     printing_type: toArray(job.printing_type),
     special_instructions: toArray(job.special_instructions),
@@ -23,6 +23,10 @@ export function normalizeJob(job) {
         ? job.layout_json
         : null,
   };
+
+  // Prevent MongoDB error: "Modifying _id is not allowed"
+  delete normalized._id;
+  return normalized;
 }
 
 export function normalizeCustomerPayload(customer) {
