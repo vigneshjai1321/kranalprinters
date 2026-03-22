@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Button, Card, Input, InputNumber, Space, Typography } from "antd";
-import { DeleteOutlined, FontSizeOutlined, LineOutlined, ReloadOutlined } from "@ant-design/icons";
+import { Button, Card, Input, InputNumber, Space, Typography, Divider } from "antd";
+import { DeleteOutlined, FontSizeOutlined, LineOutlined, ReloadOutlined, DragOutlined, BorderOutlined, EditOutlined } from "@ant-design/icons";
+import PencilTool from "./PencilTool";
 
 const { Text } = Typography;
 
@@ -85,12 +86,23 @@ function normalizeLabel(label) {
   };
 }
 
+function normalizeBox(box) {
+  return {
+    id: box.id || `box_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    x: clamp(safeNum(box.x, 0.4)),
+    y: clamp(safeNum(box.y, 0.4)),
+    w: clamp(safeNum(box.w, 0.2)),
+    h: clamp(safeNum(box.h, 0.2)),
+  };
+}
+
 function createDefaultLayout(sheet) {
   return {
-    version: 1,
+    version: 2,
     sheet,
     lines: [],
     labels: [],
+    boxes: [],
   };
 }
 
@@ -99,6 +111,7 @@ function clampLayout(layout) {
     ...layout,
     lines: (layout.lines || []).map((line) => normalizeLine(line)),
     labels: (layout.labels || []).map((label) => normalizeLabel(label)),
+    boxes: (layout.boxes || []).map((box) => normalizeBox(box)),
   };
 }
 
@@ -116,37 +129,28 @@ function areLayoutsEqual(left, right) {
   const leftLines = left.lines || [];
   const rightLines = right.lines || [];
   if (leftLines.length !== rightLines.length) return false;
-
-  for (let index = 0; index < leftLines.length; index += 1) {
-    const lineA = leftLines[index];
-    const lineB = rightLines[index];
-    if (
-      lineA.id !== lineB.id ||
-      lineA.type !== lineB.type ||
-      lineA.x1 !== lineB.x1 ||
-      lineA.y1 !== lineB.y1 ||
-      lineA.x2 !== lineB.x2 ||
-      lineA.y2 !== lineB.y2
-    ) {
-      return false;
-    }
+  for (let i = 0; i < leftLines.length; i++) {
+    const a = leftLines[i];
+    const b = rightLines[i];
+    if (a.id !== b.id || a.type !== b.type || a.x1 !== b.x1 || a.y1 !== b.y1 || a.x2 !== b.x2 || a.y2 !== b.y2) return false;
   }
 
   const leftLabels = left.labels || [];
   const rightLabels = right.labels || [];
   if (leftLabels.length !== rightLabels.length) return false;
-
-  for (let index = 0; index < leftLabels.length; index += 1) {
-    const labelA = leftLabels[index];
-    const labelB = rightLabels[index];
-    if (
-      labelA.id !== labelB.id ||
-      labelA.x !== labelB.x ||
-      labelA.y !== labelB.y ||
-      labelA.text !== labelB.text
-    ) {
-      return false;
-    }
+  for (let i = 0; i < leftLabels.length; i++) {
+    const a = leftLabels[i];
+    const b = rightLabels[i];
+    if (a.id !== b.id || a.x !== b.x || a.y !== b.y || a.text !== b.text) return false;
+  }
+  
+  const leftBoxes = left.boxes || [];
+  const rightBoxes = right.boxes || [];
+  if (leftBoxes.length !== rightBoxes.length) return false;
+  for (let i = 0; i < leftBoxes.length; i++) {
+    const a = leftBoxes[i];
+    const b = rightBoxes[i];
+    if (a.id !== b.id || a.x !== b.x || a.y !== b.y || a.w !== b.w || a.h !== b.h) return false;
   }
 
   return true;
@@ -168,13 +172,13 @@ function labelToPixels(label, sheetRect) {
   };
 }
 
-function buildDefaultLine(type = "vertical", x = 0.5, y = 0.5) {
-  const presets = {
-    vertical: { type: "vertical", x1: x, y1: 0.08, x2: x, y2: 0.92 },
-    horizontal: { type: "horizontal", x1: 0.08, y1: y, x2: 0.92, y2: y },
-    slanted: { type: "slanted", x1: 0.2, y1: 0.25, x2: 0.8, y2: 0.75 },
+function boxToPixels(box, sheetRect) {
+  return {
+    x: sheetRect.x + box.x * sheetRect.width,
+    y: sheetRect.y + box.y * sheetRect.height,
+    w: box.w * sheetRect.width,
+    h: box.h * sheetRect.height,
   };
-  return normalizeLine(presets[type] || presets.vertical);
 }
 
 export default function BoxDiagramPreview({
@@ -193,10 +197,10 @@ export default function BoxDiagramPreview({
   const svgRef = useRef(null);
   const dragRef = useRef(null);
   const [layout, setLayout] = useState(null);
-  const [lineType, setLineType] = useState("vertical");
+  const [activeTool, setActiveTool] = useState("select");
   const [labelDraft, setLabelDraft] = useState("");
-  const [labelMode, setLabelMode] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);
+  const [draftShape, setDraftShape] = useState(null);
 
   const sheet = useMemo(() => {
     const fallbackW = safeNum(length, 18);
@@ -231,10 +235,7 @@ export default function BoxDiagramPreview({
     };
 
     setLayout((prev) => {
-      if (areLayoutsEqual(prev, nextLayout)) {
-        return prev;
-      }
-
+      if (areLayoutsEqual(prev, nextLayout)) return prev;
       return nextLayout;
     });
   }, [initialLayout, sheet]);
@@ -266,23 +267,14 @@ export default function BoxDiagramPreview({
     });
   };
 
-  const addLine = (type = lineType) => {
-    if (disabled) return;
-    setLayoutSafe((prev) => {
-      const nextLine = buildDefaultLine(type, 0.5, 0.5);
-      return {
-        ...prev,
-        lines: [...prev.lines, nextLine],
-      };
-    });
-  };
-
   const deleteSelected = () => {
-    if (disabled) return;
-    if (!selectedItem) return;
+    if (disabled || !selectedItem) return;
     setLayoutSafe((prev) => {
       if (selectedItem.kind === "line") {
         return { ...prev, lines: prev.lines.filter((line) => line.id !== selectedItem.id) };
+      }
+      if (selectedItem.kind === "box") {
+        return { ...prev, boxes: (prev.boxes || []).filter((box) => box.id !== selectedItem.id) };
       }
       return { ...prev, labels: prev.labels.filter((label) => label.id !== selectedItem.id) };
     });
@@ -295,36 +287,33 @@ export default function BoxDiagramPreview({
     setSelectedItem(null);
   };
 
-  const clearLines = () => {
+  const startCanvasDrag = (event) => {
     if (disabled) return;
-    setLayoutSafe((prev) => ({ ...prev, lines: [] }));
-    setSelectedItem((prev) => (prev?.kind === "line" ? null : prev));
+    const start = svgPointToNormalized(event);
+    if (!start) return;
+
+    if (activeTool === "label") {
+      const text = formatDimensionText(labelDraft) || "0";
+      const newLabel = normalizeLabel({ x: start.x, y: start.y, text });
+      setLayoutSafe((prev) => ({ ...prev, labels: [...prev.labels, newLabel] }));
+      setSelectedItem({ kind: "label", id: newLabel.id });
+      setActiveTool("select");
+      return;
+    }
+
+    if (activeTool === "select") {
+      setSelectedItem(null);
+      return;
+    }
+
+    dragRef.current = { kind: "drawing", tool: activeTool, start, current: start };
+    setSelectedItem(null);
+    setDraftShape({ type: activeTool, start, current: start });
   };
 
-  const clearLabels = () => {
+  const startItemDrag = (payload, event) => {
     if (disabled) return;
-    setLayoutSafe((prev) => ({ ...prev, labels: [] }));
-    setSelectedItem((prev) => (prev?.kind === "label" ? null : prev));
-  };
-
-  const addGuideSet = () => {
-    if (disabled) return;
-    setLayoutSafe((prev) => ({
-      ...prev,
-      lines: [
-        ...prev.lines,
-        buildDefaultLine("vertical", 0.25, 0.5),
-        buildDefaultLine("vertical", 0.5, 0.5),
-        buildDefaultLine("vertical", 0.75, 0.5),
-        buildDefaultLine("horizontal", 0.5, 0.25),
-        buildDefaultLine("horizontal", 0.5, 0.5),
-        buildDefaultLine("horizontal", 0.5, 0.75),
-      ],
-    }));
-  };
-
-  const startDrag = (payload, event) => {
-    if (disabled) return;
+    if (activeTool !== "select") return;
     event.stopPropagation();
     const start = svgPointToNormalized(event);
     if (!start) return;
@@ -336,6 +325,11 @@ export default function BoxDiagramPreview({
     const current = svgPointToNormalized(event);
     if (!current) return;
 
+    if (dragRef.current.kind === "drawing") {
+      setDraftShape(prev => ({ ...prev, current }));
+      return;
+    }
+
     const { kind, id, handle, start } = dragRef.current;
     const dx = current.x - start.x;
     const dy = current.y - start.y;
@@ -345,17 +339,7 @@ export default function BoxDiagramPreview({
         const nextLines = prev.lines.map((line) => {
           if (line.id !== id) return line;
           if (handle === "move") {
-            if (line.type === "vertical") {
-              const x = clamp(line.x1 + dx);
-              return { ...line, x1: x, x2: x };
-            }
-            if (line.type === "horizontal") {
-              const y = clamp(line.y1 + dy);
-              return { ...line, y1: y, y2: y };
-            }
-
-            let nextDx = dx;
-            let nextDy = dy;
+            let nextDx = dx, nextDy = dy;
             const minX = Math.min(line.x1 + nextDx, line.x2 + nextDx);
             const maxX = Math.max(line.x1 + nextDx, line.x2 + nextDx);
             const minY = Math.min(line.y1 + nextDy, line.y2 + nextDy);
@@ -373,34 +357,38 @@ export default function BoxDiagramPreview({
             };
           }
 
-          if (line.type === "vertical") {
-            if (handle === "start") return { ...line, y1: clamp(line.y1 + dy) };
-            return { ...line, y2: clamp(line.y2 + dy) };
-          }
-          if (line.type === "horizontal") {
-            if (handle === "start") return { ...line, x1: clamp(line.x1 + dx) };
-            return { ...line, x2: clamp(line.x2 + dx) };
-          }
           if (handle === "start") {
-            return { ...line, x1: clamp(line.x1 + dx), y1: clamp(line.y1 + dy) };
+             return { ...line, x1: clamp(line.x1 + dx), y1: clamp(line.y1 + dy) };
           }
           return { ...line, x2: clamp(line.x2 + dx), y2: clamp(line.y2 + dy) };
         });
         return { ...prev, lines: nextLines };
       });
       dragRef.current = { ...dragRef.current, start: current };
-      return;
-    }
-
-    if (kind === "label") {
+    } else if (kind === "box") {
+      setLayoutSafe((prev) => {
+        const nextBoxes = prev.boxes.map((box) => {
+          if (box.id !== id) return box;
+          if (handle === "move") {
+            const maxX = 1 - box.w;
+            const maxY = 1 - box.h;
+            return { ...box, x: clamp(box.x + dx, 0, maxX), y: clamp(box.y + dy, 0, maxY) };
+          }
+          if (handle === "se") {
+             const newW = clamp(box.w + dx, 0.01, 1 - box.x);
+             const newH = clamp(box.h + dy, 0.01, 1 - box.y);
+             return { ...box, w: newW, h: newH };
+          }
+          return box;
+        });
+        return { ...prev, boxes: nextBoxes };
+      });
+      dragRef.current = { ...dragRef.current, start: current };
+    } else if (kind === "label") {
       setLayoutSafe((prev) => {
         const nextLabels = prev.labels.map((label) => {
           if (label.id !== id) return label;
-          return {
-            ...label,
-            x: clamp(label.x + dx),
-            y: clamp(label.y + dy),
-          };
+          return { ...label, x: clamp(label.x + dx), y: clamp(label.y + dy) };
         });
         return { ...prev, labels: nextLabels };
       });
@@ -409,6 +397,47 @@ export default function BoxDiagramPreview({
   };
 
   const handleMouseUp = () => {
+    if (dragRef.current?.kind === "drawing" && draftShape) {
+      const { tool, start, current } = dragRef.current;
+      if (tool === "line") {
+        const len = Math.hypot(current.x - start.x, current.y - start.y);
+        if (len > 0.02) {
+          let type = "slanted";
+          let x1 = start.x;
+          let y1 = start.y;
+          let x2 = current.x;
+          let y2 = current.y;
+
+          if (Math.abs(current.x - start.x) < 0.02) {
+            type = "vertical";
+            x1 = x2;
+          } else if (Math.abs(current.y - start.y) < 0.02) {
+            type = "horizontal";
+            y1 = y2;
+          }
+
+          const finalLine = normalizeLine({ id: `line_${Date.now()}`, type, x1, y1, x2, y2 });
+          setLayoutSafe((prev) => ({ ...prev, lines: [...prev.lines, finalLine] }));
+          setSelectedItem({ kind: "line", id: finalLine.id });
+        }
+      } else if (tool === "box") {
+        const w = Math.abs(current.x - start.x);
+        const h = Math.abs(current.y - start.y);
+        if (w > 0.02 && h > 0.02) {
+          const finalBox = normalizeBox({
+            id: `box_${Date.now()}`,
+            x: Math.min(start.x, current.x),
+            y: Math.min(start.y, current.y),
+            w,
+            h,
+          });
+          setLayoutSafe((prev) => ({ ...prev, boxes: [...(prev.boxes||[]), finalBox] }));
+          setSelectedItem({ kind: "box", id: finalBox.id });
+        }
+      }
+      setActiveTool("select");
+      setDraftShape(null);
+    }
     dragRef.current = null;
   };
 
@@ -421,22 +450,51 @@ export default function BoxDiagramPreview({
     };
   });
 
-  const onCanvasClick = (event) => {
-    if (disabled) {
-      setSelectedItem(null);
-      return;
-    }
-    if (!labelMode || !layout) {
-      setSelectedItem(null);
-      return;
-    }
-    const point = svgPointToNormalized(event);
-    if (!point) return;
-    const text = formatDimensionText(labelDraft) || "0";
-    const newLabel = normalizeLabel({ x: point.x, y: point.y, text });
-    setLayoutSafe((prev) => ({ ...prev, labels: [...prev.labels, newLabel] }));
-    setSelectedItem({ kind: "label", id: newLabel.id });
-    setLabelMode(false);
+  const selectedItemData = useMemo(() => {
+    if (!layout || !selectedItem) return null;
+    if (selectedItem.kind === "line") return layout.lines.find(l => l.id === selectedItem.id);
+    if (selectedItem.kind === "box") return layout.boxes.find(b => b.id === selectedItem.id);
+    return null;
+  }, [layout, selectedItem]);
+
+  const updateSelectedBox = (key, value) => {
+    const val = clamp(value / (key === 'w' || key === 'x' ? sheet.width : sheet.height));
+    setLayoutSafe((prev) => ({
+      ...prev,
+      boxes: prev.boxes.map(b => b.id === selectedItem.id ? { ...b, [key]: val } : b)
+    }));
+  };
+
+  const updateSelectedLine = (key, value) => {
+    const valX = clamp(value / sheet.width);
+    const valY = clamp(value / sheet.height);
+    setLayoutSafe((prev) => ({
+      ...prev,
+      lines: prev.lines.map(l => {
+        if (l.id !== selectedItem.id) return l;
+        if (key === "y") {
+            const dy = valY - Math.min(l.y1, l.y2);
+            return { ...l, y1: clamp(l.y1 + dy), y2: clamp(l.y2 + dy) };
+        }
+        if (key === "x") {
+            const dx = valX - Math.min(l.x1, l.x2);
+            return { ...l, x1: clamp(l.x1 + dx), x2: clamp(l.x2 + dx) };
+        }
+        if (key === "len") {
+           const dx = (l.x2 - l.x1) * sheet.width;
+           const dy = (l.y2 - l.y1) * sheet.height;
+           const currLen = Math.hypot(dx, dy);
+           if (currLen < 0.001) return l;
+           const scale = value / currLen;
+           const midX = (l.x1 + l.x2) / 2;
+           const midY = (l.y1 + l.y2) / 2;
+           const halfDx = ((l.x2 - l.x1) * scale) / 2;
+           const halfDy = ((l.y2 - l.y1) * scale) / 2;
+           return { ...l, x1: clamp(midX - halfDx), x2: clamp(midX + halfDx), y1: clamp(midY - halfDy), y2: clamp(midY + halfDy) };
+        }
+        return l;
+      })
+    }));
   };
 
   return (
@@ -444,14 +502,8 @@ export default function BoxDiagramPreview({
       size="small"
       title="Layout Drawing Tool"
       className="diagram-card"
-      extra={<Text type="secondary">{disabled ? "View only" : "Auto-saved with this job"}</Text>}
+      extra={<Text type="secondary">{disabled ? "View only" : "Interactive Job Layout"}</Text>}
     >
-      <div className="diagram-help-row">
-        <Text type="secondary">Step 1: Set dimensions</Text>
-        <Text type="secondary">Step 2: Add guides or labels</Text>
-        <Text type="secondary">Step 3: Drag and fine-tune</Text>
-      </div>
-
       <div className="diagram-control-grid">
         <Space direction="vertical" size={4}>
           <Text type="secondary">Length (L)</Text>
@@ -471,59 +523,62 @@ export default function BoxDiagramPreview({
         </Space>
       </div>
 
-      <div className="diagram-toolbar">
+      <div className="diagram-toolbar" style={{ marginTop: 16 }}>
         <div className="diagram-toolbar-row">
-          <Text className="diagram-toolbar-label">Line Type</Text>
-          <SelectLineType value={lineType} onChange={setLineType} disabled={disabled} />
-          <Button icon={<LineOutlined />} onClick={() => addLine(lineType)} disabled={disabled}>Add Line</Button>
-          <Button type="primary" onClick={() => addLine("vertical")} disabled={disabled}>Center Vertical</Button>
-          <Button type="primary" onClick={() => addLine("horizontal")} disabled={disabled}>Center Horizontal</Button>
-          <Button onClick={addGuideSet} disabled={disabled}>Add Guide Set</Button>
-          <Button icon={<ReloadOutlined />} onClick={resetLayout} disabled={disabled}>Reset</Button>
-          <Button icon={<DeleteOutlined />} danger disabled={!selectedItem || disabled} onClick={deleteSelected}>Delete</Button>
+          <Text className="diagram-toolbar-label">Tools</Text>
+          <SelectLineType value={activeTool} onChange={setActiveTool} disabled={disabled} />
+          
+          <Divider type="vertical" />
+          <Button icon={<ReloadOutlined />} onClick={resetLayout} disabled={disabled}>Clear All</Button>
+          <Button icon={<DeleteOutlined />} danger disabled={!selectedItem || disabled} onClick={deleteSelected}>Delete Selected</Button>
         </div>
-        <div className="diagram-toolbar-row">
-          <Text className="diagram-toolbar-label">Label</Text>
-          <Input
-            value={labelDraft}
-            onChange={(event) => setLabelDraft(event.target.value)}
-            placeholder="e.g., 15.75 (auto -> 15 3/4)"
-            className="diagram-label-input"
-            disabled={disabled}
-          />
-          <Button
-            type={labelMode ? "primary" : "default"}
-            icon={<FontSizeOutlined />}
-            onClick={() => setLabelMode((prev) => !prev)}
-            disabled={disabled}
-          >
-            {labelMode ? "Click on Sheet" : "Place Label"}
-          </Button>
-          <Button onClick={clearLines} disabled={disabled || !(layout?.lines?.length)}>Clear Lines</Button>
-          <Button onClick={clearLabels} disabled={disabled || !(layout?.labels?.length)}>Clear Labels</Button>
-          <Text type="secondary">
-            {layout ? `${layout.lines.length} lines, ${layout.labels.length} labels` : "0 lines, 0 labels"}
-          </Text>
-        </div>
-        <div className="diagram-toolbar-row diagram-status-row">
-          <Text className={`diagram-status-pill ${selectedItem ? "is-active" : ""}`}>
-            {selectedItem ? `Selected: ${selectedItem.kind}` : "Selected: none"}
-          </Text>
-          <Text className={`diagram-status-pill ${labelMode ? "is-active" : ""}`}>
-            {labelMode ? "Label placement ON" : "Label placement OFF"}
-          </Text>
-        </div>
+
+        {selectedItemData && selectedItem.kind === "box" && (
+           <div className="diagram-toolbar-row" style={{ backgroundColor: '#f0f5ff', padding: 8, borderRadius: 4 }}>
+             <Text strong>Selected Box Dimensions :</Text>
+             <Space>
+               <Text>Width:</Text>
+               <InputNumber size="small" step={0.1} value={Number((selectedItemData.w * sheet.width).toFixed(2))} onChange={(v) => updateSelectedBox('w', v)} />
+               <Text>Breadth/Height:</Text>
+               <InputNumber size="small" step={0.1} value={Number((selectedItemData.h * sheet.height).toFixed(2))} onChange={(v) => updateSelectedBox('h', v)} />
+               <Text>X Pos:</Text>
+               <InputNumber size="small" step={0.1} value={Number((selectedItemData.x * sheet.width).toFixed(2))} onChange={(v) => updateSelectedBox('x', v)} />
+               <Text>Y Pos:</Text>
+               <InputNumber size="small" step={0.1} value={Number((selectedItemData.y * sheet.height).toFixed(2))} onChange={(v) => updateSelectedBox('y', v)} />
+             </Space>
+           </div>
+        )}
+        
+        {selectedItemData && selectedItem.kind === "line" && (
+           <div className="diagram-toolbar-row" style={{ backgroundColor: '#f0f5ff', padding: 8, borderRadius: 4 }}>
+             <Text strong>Selected Line Settings :</Text>
+             <Space>
+               <Text>Length:</Text>
+               <InputNumber size="small" step={0.1} 
+                 value={Number(Math.hypot(
+                   (selectedItemData.x2 - selectedItemData.x1) * sheet.width, 
+                   (selectedItemData.y2 - selectedItemData.y1) * sheet.height
+                 ).toFixed(2))} 
+                 onChange={(v) => updateSelectedLine('len', v)} />
+               <Text>X Pos:</Text>
+               <InputNumber size="small" step={0.1} value={Number((Math.min(selectedItemData.x1, selectedItemData.x2) * sheet.width).toFixed(2))} onChange={(v) => updateSelectedLine('x', v)} />
+               <Text>Y Pos:</Text>
+               <InputNumber size="small" step={0.1} value={Number((Math.min(selectedItemData.y1, selectedItemData.y2) * sheet.height).toFixed(2))} onChange={(v) => updateSelectedLine('y', v)} />
+             </Space>
+           </div>
+        )}
       </div>
 
-      <div className="diagram-canvas-wrap">
+      <div className="diagram-canvas-wrap" style={{ position: 'relative', cursor: activeTool === 'select' ? 'default' : 'crosshair', marginTop: 12 }}>
         <svg
           ref={svgRef}
           viewBox={`0 0 ${SVG_VIEWBOX.width} ${SVG_VIEWBOX.height}`}
           width="100%"
           height="380"
-          className={`diagram-canvas ${labelMode ? "diagram-canvas-label-mode" : ""} ${disabled ? "diagram-canvas-readonly" : ""}`}
-          onClick={onCanvasClick}
+          className={`diagram-canvas ${disabled ? "diagram-canvas-readonly" : ""}`}
+          onMouseDown={startCanvasDrag}
           aria-label="interactive job layout"
+          style={{ userSelect: 'none' }}
         >
           <rect x={0} y={0} width={SVG_VIEWBOX.width} height={SVG_VIEWBOX.height} fill="#f8fbff" />
           <rect
@@ -537,102 +592,123 @@ export default function BoxDiagramPreview({
             rx="6"
           />
 
+          {layout?.boxes?.map((box) => {
+            const p = boxToPixels(box, sheetRect);
+            const selected = selectedItem?.kind === "box" && selectedItem.id === box.id;
+            return (
+              <g key={box.id}>
+                <rect
+                  x={p.x} y={p.y} width={p.w} height={p.h}
+                  fill={selected ? "#bfdbfe" : "#dbeafe"}
+                  fillOpacity={0.6}
+                  stroke={selected ? "#2563eb" : "#3b82f6"}
+                  strokeWidth={selected ? 2.5 : 1.5}
+                  onMouseDown={(event) => {
+                    setSelectedItem({ kind: "box", id: box.id });
+                    startItemDrag({ kind: "box", id: box.id, handle: "move" }, event);
+                  }}
+                />
+                {selected && (
+                  <circle
+                    cx={p.x + p.w} cy={p.y + p.h} r={6}
+                    fill="#ffffff" stroke="#2563eb" strokeWidth="2"
+                    style={{ cursor: "se-resize" }}
+                    onMouseDown={(event) => {
+                      startItemDrag({ kind: "box", id: box.id, handle: "se" }, event);
+                    }}
+                  />
+                )}
+                <text x={p.x + p.w/2} y={p.y + p.h/2} textAnchor="middle" alignmentBaseline="middle" fill="#1e3a8a" fontSize={11} pointerEvents="none">
+                  {((box.w * sheet.width).toFixed(1))} x {((box.h * sheet.height).toFixed(1))}
+                </text>
+              </g>
+            )
+          })}
+
           {layout?.lines.map((line) => {
             const p = lineToPixels(line, sheetRect);
             const selected = selectedItem?.kind === "line" && selectedItem.id === line.id;
             return (
               <g key={line.id}>
                 <line
-                  x1={p.x1}
-                  y1={p.y1}
-                  x2={p.x2}
-                  y2={p.y2}
+                  x1={p.x1} y1={p.y1} x2={p.x2} y2={p.y2}
                   stroke={selected ? "#ef4444" : "#1455ad"}
                   strokeWidth={selected ? 3.5 : 2.4}
                   strokeLinecap="round"
                   onMouseDown={(event) => {
                     setSelectedItem({ kind: "line", id: line.id });
-                    startDrag({ kind: "line", id: line.id, handle: "move" }, event);
+                    startItemDrag({ kind: "line", id: line.id, handle: "move" }, event);
                   }}
                 />
                 <circle
-                  cx={p.x1}
-                  cy={p.y1}
-                  r={selected ? 6 : 5}
-                  fill="#ffffff"
-                  stroke="#1f5ead"
-                  strokeWidth="2"
+                  cx={p.x1} cy={p.y1} r={selected ? 6 : 5}
+                  fill="#ffffff" stroke="#1f5ead" strokeWidth="2"
                   onMouseDown={(event) => {
                     setSelectedItem({ kind: "line", id: line.id });
-                    startDrag({ kind: "line", id: line.id, handle: "start" }, event);
+                    startItemDrag({ kind: "line", id: line.id, handle: "start" }, event);
                   }}
                 />
                 <circle
-                  cx={p.x2}
-                  cy={p.y2}
-                  r={selected ? 6 : 5}
-                  fill="#ffffff"
-                  stroke="#1f5ead"
-                  strokeWidth="2"
+                  cx={p.x2} cy={p.y2} r={selected ? 6 : 5}
+                  fill="#ffffff" stroke="#1f5ead" strokeWidth="2"
                   onMouseDown={(event) => {
                     setSelectedItem({ kind: "line", id: line.id });
-                    startDrag({ kind: "line", id: line.id, handle: "end" }, event);
+                    startItemDrag({ kind: "line", id: line.id, handle: "end" }, event);
                   }}
                 />
               </g>
             );
           })}
 
-          {layout?.labels.map((label) => {
-            const p = labelToPixels(label, sheetRect);
-            const selected = selectedItem?.kind === "label" && selectedItem.id === label.id;
-            return (
-              <g key={label.id}>
-                <rect
-                  x={p.x - 4}
-                  y={p.y - 16}
-                  width={Math.max(34, label.text.length * 7.4)}
-                  height={20}
-                  fill={selected ? "#ffe8e8" : "#ffffff"}
-                  stroke={selected ? "#ef4444" : "#8eb8f0"}
-                  rx={4}
+          {draftShape && (
+            <g opacity={0.6}>
+              {draftShape.type === 'line' && (
+                <line 
+                  x1={sheetRect.x + draftShape.start.x * sheetRect.width} 
+                  y1={sheetRect.y + draftShape.start.y * sheetRect.height} 
+                  x2={sheetRect.x + draftShape.current.x * sheetRect.width} 
+                  y2={sheetRect.y + draftShape.current.y * sheetRect.height} 
+                  stroke="#ef4444" strokeWidth="2" strokeDasharray="4 4"
                 />
-                <text
-                  x={p.x}
-                  y={p.y - 2}
-                  fill="#0f3765"
-                  fontSize="13"
-                  fontWeight="600"
-                  onMouseDown={(event) => {
-                    setSelectedItem({ kind: "label", id: label.id });
-                    startDrag({ kind: "label", id: label.id }, event);
-                  }}
-                >
-                  {label.text || "-"}
-                </text>
-              </g>
-            );
-          })}
+              )}
+              {draftShape.type === 'box' && (
+                <rect 
+                  x={sheetRect.x + Math.min(draftShape.start.x, draftShape.current.x) * sheetRect.width} 
+                  y={sheetRect.y + Math.min(draftShape.start.y, draftShape.current.y) * sheetRect.height} 
+                  width={Math.abs(draftShape.current.x - draftShape.start.x) * sheetRect.width} 
+                  height={Math.abs(draftShape.current.y - draftShape.start.y) * sheetRect.height} 
+                  fill="none" stroke="#ef4444" strokeWidth="2" strokeDasharray="4 4"
+                />
+              )}
+            </g>
+          )}
 
           <text x={sheetRect.x + 6} y={sheetRect.y - 10} fill="#1f4e87" fontSize="12" fontWeight="700">
             Cutting Size: {sheet.cuttingSize}
           </text>
         </svg>
-      </div>
 
-      <Text type="secondary">
-        Tip: drag line body to move, drag line ends to resize, and use "Add Guide Set" for quick structure.
-      </Text>
+        <PencilTool isActive={activeTool === 'pencil'} viewBoxWidth={SVG_VIEWBOX.width} viewBoxHeight={SVG_VIEWBOX.height} />
+      </div>
     </Card>
   );
 }
 
 function SelectLineType({ value, onChange, disabled }) {
   return (
-    <div className="diagram-line-type">
-      <button type="button" className={value === "vertical" ? "active" : ""} onClick={() => onChange("vertical")} disabled={disabled}>Vertical</button>
-      <button type="button" className={value === "horizontal" ? "active" : ""} onClick={() => onChange("horizontal")} disabled={disabled}>Horizontal</button>
-      <button type="button" className={value === "slanted" ? "active" : ""} onClick={() => onChange("slanted")} disabled={disabled}>Slanted</button>
+    <div className="diagram-line-type" style={{ display: 'flex', gap: 4 }}>
+      <button type="button" className={value === "select" ? "active" : ""} onClick={() => onChange("select")} disabled={disabled} style={{ background: value==='select'?'#e6f7ff':'', border: value==='select'?'1px solid #1890ff':'1px solid #d9d9d9', padding: '4px 12px', borderRadius: 4, cursor: 'pointer' }}>
+        <DragOutlined style={{ marginRight: 6 }}/> Select/Move
+      </button>
+      <button type="button" className={value === "pencil" ? "active" : ""} onClick={() => onChange("pencil")} disabled={disabled} style={{ background: value==='pencil'?'#e6f7ff':'', border: value==='pencil'?'1px solid #1890ff':'1px solid #d9d9d9', padding: '4px 12px', borderRadius: 4, cursor: 'pointer' }}>
+        <EditOutlined style={{ marginRight: 6 }} /> Pencil
+      </button>
+      <button type="button" className={value === "line" ? "active" : ""} onClick={() => onChange("line")} disabled={disabled} style={{ background: value==='line'?'#e6f7ff':'', border: value==='line'?'1px solid #1890ff':'1px solid #d9d9d9', padding: '4px 12px', borderRadius: 4, cursor: 'pointer' }}>
+        <LineOutlined style={{ marginRight: 6 }} /> Draw Line
+      </button>
+      <button type="button" className={value === "box" ? "active" : ""} onClick={() => onChange("box")} disabled={disabled} style={{ background: value==='box'?'#e6f7ff':'', border: value==='box'?'1px solid #1890ff':'1px solid #d9d9d9', padding: '4px 12px', borderRadius: 4, cursor: 'pointer' }}>
+        <BorderOutlined style={{ marginRight: 6 }} /> Draw Box
+      </button>
     </div>
   );
 }
