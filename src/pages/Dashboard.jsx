@@ -43,47 +43,66 @@ function buildSparkPath(points, width = 320, height = 110) {
 
 export default function Dashboard({ jobs }) {
   const navigate = useNavigate();
-  const total = jobs.length;
-  const pending = jobs.filter((job) => job.status === "Pending").length;
-  const inProgress = jobs.filter((job) => job.status === "In Progress").length;
-  const completed = jobs.filter((job) => job.status === "Completed").length;
-  const totalQty = jobs.reduce((sum, job) => sum + Number(job.quantity || 0), 0);
+  const stats = useMemo(() => {
+    const total = jobs.length;
+    const pending = jobs.filter((job) => job.status === "Pending").length;
+    const inProgress = jobs.filter((job) => job.status === "In Progress").length;
+    const completed = jobs.filter((job) => job.status === "Completed").length;
+    const totalQty = jobs.reduce((sum, job) => sum + Number(job.quantity || 0), 0);
+    const completionRate = total ? Math.round((completed / total) * 100) : 0;
+    
+    return { total, pending, inProgress, completed, totalQty, completionRate };
+  }, [jobs]);
 
-  const completionRate = total ? Math.round((completed / total) * 100) : 0;
-  const trend = getLast7DaysTrend(jobs);
-  const sparkPath = buildSparkPath(trend);
+  const { total, pending, inProgress, completed, totalQty, completionRate } = stats;
 
-  const machineData = Object.entries(
-    jobs.reduce((acc, job) => {
-      acc[job.machine] = (acc[job.machine] || 0) + 1;
-      return acc;
-    }, {})
-  )
-    .map(([machine, count]) => ({ machine, count }))
-    .sort((a, b) => b.count - a.count);
+  const trendData = useMemo(() => {
+    const trend = getLast7DaysTrend(jobs);
+    const sparkPath = buildSparkPath(trend);
+    return { trend, sparkPath };
+  }, [jobs]);
 
-  const customerData = Object.entries(
-    jobs.reduce((acc, job) => {
-      const key = job.customer_name;
-      acc[key] = (acc[key] || 0) + Number(job.quantity || 0);
-      return acc;
-    }, {})
-  )
-    .map(([customer, qty]) => ({ customer, qty }))
-    .sort((a, b) => b.qty - a.qty)
-    .slice(0, 5);
+  const { trend, sparkPath } = trendData;
 
-  const statusDistribution = [
+  const machineData = useMemo(() => {
+    return Object.entries(
+      jobs.reduce((acc, job) => {
+        acc[job.machine] = (acc[job.machine] || 0) + 1;
+        return acc;
+      }, {})
+    )
+      .map(([machine, count]) => ({ machine, count }))
+      .sort((a, b) => b.count - a.count);
+  }, [jobs]);
+
+  const customerData = useMemo(() => {
+    return Object.entries(
+      jobs.reduce((acc, job) => {
+        const key = job.customer_name;
+        acc[key] = (acc[key] || 0) + Number(job.quantity || 0);
+        return acc;
+      }, {})
+    )
+      .map(([customer, qty]) => ({ customer, qty }))
+      .sort((a, b) => b.qty - a.qty)
+      .slice(0, 5);
+  }, [jobs]);
+
+  const statusDistribution = useMemo(() => [
     { label: "Pending", value: pending, color: "#ef4444" },
     { label: "In Progress", value: inProgress, color: "#f97316" },
     { label: "Completed", value: completed, color: "#22c55e" },
-  ];
+  ], [pending, inProgress, completed]);
 
-  const today = new Date().toISOString().slice(0, 10);
-  const todayJobs = jobs.filter((job) => job.created_at === today);
-  const recentJobs = [...jobs]
-    .sort((a, b) => new Date(b.last_updated_at || b.created_at).getTime() - new Date(a.last_updated_at || a.created_at).getTime())
-    .slice(0, 6);
+  const displayJobs = useMemo(() => {
+    const today = new Date().toISOString().slice(0, 10);
+    const todayJobs = jobs.filter((job) => job.created_at === today);
+    const recent = [...jobs]
+      .sort((a, b) => new Date(b.last_updated_at || b.created_at).getTime() - new Date(a.last_updated_at || a.created_at).getTime())
+      .slice(0, 6);
+    return todayJobs.length ? todayJobs.slice(0, 6) : recent;
+  }, [jobs]);
+
 
   return (
     <Space direction="vertical" size={16} style={{ width: "100%" }}>
@@ -231,7 +250,7 @@ export default function Dashboard({ jobs }) {
             className="dashboard-chart-card"
           >
             <Row gutter={[12, 12]}>
-              {(todayJobs.length ? todayJobs.slice(0, 6) : recentJobs).map((job) => (
+              {displayJobs.map((job) => (
                 <Col xs={24} md={12} key={job.id}>
                   <JobCard job={job} showDownload={false} />
                 </Col>

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"; // Fixed ReferenceError: useCallback by adding to imports
 import { Button, Card, Input, InputNumber, Space, Typography, Divider } from "antd";
 import { DeleteOutlined, FontSizeOutlined, LineOutlined, ReloadOutlined, DragOutlined, BorderOutlined, EditOutlined } from "@ant-design/icons";
 import PencilTool from "./PencilTool";
@@ -335,7 +335,7 @@ export default function BoxDiagramPreview({
     dragRef.current = { ...payload, start };
   };
 
-  const handleMouseMove = (event) => {
+  const handleMouseMove = useCallback((event) => {
     if (!dragRef.current || !layout) return;
     const current = svgPointToNormalized(event);
     if (!current) return;
@@ -410,9 +410,9 @@ export default function BoxDiagramPreview({
       });
       dragRef.current = { ...dragRef.current, start: current };
     }
-  };
+  }, [layout, sheetRect.height, sheetRect.width, sheetRect.x, sheetRect.y]);
 
-  const handleMouseUp = () => {
+  const handleMouseUp = useCallback(() => {
     if (dragRef.current?.kind === "drawing" && draftShape) {
       const { tool, start, current } = dragRef.current;
       if (tool === "line") {
@@ -455,7 +455,7 @@ export default function BoxDiagramPreview({
       setDraftShape(null);
     }
     dragRef.current = null;
-  };
+  }, [draftShape]);
 
   useEffect(() => {
     window.addEventListener("mousemove", handleMouseMove);
@@ -464,7 +464,8 @@ export default function BoxDiagramPreview({
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mouseup", handleMouseUp);
     };
-  });
+  }, [handleMouseMove, handleMouseUp]);
+
 
   const selectedItemData = useMemo(() => {
     if (!layout || !selectedItem) return null;
@@ -658,7 +659,32 @@ export default function BoxDiagramPreview({
             )
           })}
 
-          {layout?.lines.map((line) => {
+          {layout?.labels?.map((label) => {
+            const p = labelToPixels(label, sheetRect);
+            const selected = selectedItem?.kind === "label" && selectedItem.id === label.id;
+            return (
+              <g key={label.id}>
+                <text
+                  x={p.x}
+                  y={p.y}
+                  textAnchor="middle"
+                  alignmentBaseline="middle"
+                  fill={selected ? "#ef4444" : "#1e40af"}
+                  fontSize="14"
+                  fontWeight="600"
+                  style={{ cursor: "move", userSelect: "none" }}
+                  onMouseDown={(event) => {
+                    setSelectedItem({ kind: "label", id: label.id });
+                    startItemDrag({ kind: "label", id: label.id }, event);
+                  }}
+                >
+                  {label.text}
+                </text>
+              </g>
+            );
+          })}
+
+          {layout?.lines?.map((line) => {
             const p = lineToPixels(line, sheetRect);
             const selected = selectedItem?.kind === "line" && selectedItem.id === line.id;
             return (

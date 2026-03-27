@@ -11,11 +11,23 @@ function toArray(value) {
   return [value];
 }
 
+function toOptionalNumber(value) {
+  if (value === undefined || value === null || value === "") return value;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : value;
+}
+
 function normalizeJob(job) {
   if (!job || typeof job !== "object") return job;
 
   return {
     ...job,
+    quantity: toOptionalNumber(job.quantity),
+    size_l: toOptionalNumber(job.size_l),
+    size_b: toOptionalNumber(job.size_b),
+    size_h: toOptionalNumber(job.size_h),
+    border_waste_mm: toOptionalNumber(job.border_waste_mm),
+    color_count: toOptionalNumber(job.color_count),
     printing_type: toArray(job.printing_type),
     special_instructions: toArray(job.special_instructions),
     finishing_main: toArray(job.finishing_main),
