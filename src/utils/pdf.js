@@ -143,33 +143,20 @@ function createJobPdfDocument(job) {
   addSectionHeader(doc, left, y, width, "Reference Drawing Area");
   y += 28;
 
-  const boxGap = 14;
-  const boxWidth = (width - boxGap) / 2;
-  const boxHeight = 160;
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(10);
-  doc.setTextColor(36, 65, 103);
-  doc.text("Reference Sketch 1", left + 8, y + 12);
-  doc.text("Reference Sketch 2", left + boxWidth + boxGap + 8, y + 12);
+  const previewHeight = 240;
 
   doc.setDrawColor(152, 179, 212);
   doc.setLineWidth(1.2);
-  doc.roundedRect(left, y + 18, boxWidth, boxHeight, 8, 8);
-  doc.roundedRect(left + boxWidth + boxGap, y + 18, boxWidth, boxHeight, 8, 8);
+  doc.roundedRect(left, y, width, previewHeight, 8, 8);
 
-  doc.setDrawColor(226, 234, 246);
-  doc.setLineWidth(0.6);
-  for (let i = 1; i <= 7; i += 1) {
-    const lineY = y + 18 + i * (boxHeight / 8);
-    doc.line(left + 8, lineY, left + boxWidth - 8, lineY);
-    doc.line(left + boxWidth + boxGap + 8, lineY, left + width - 8, lineY);
+  if (job.layout_image) {
+    doc.addImage(job.layout_image, "PNG", left + 8, y + 8, width - 16, previewHeight - 16);
+  } else {
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.setTextColor(107, 124, 147);
+    doc.text("No saved drawing image available for this job.", left + 12, y + 24);
   }
-
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(9);
-  doc.setTextColor(107, 124, 147);
-  doc.text("Use this space for manual drawing / approval notes.", left + 8, y + boxHeight + 34);
 
   return doc;
 }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   App,
@@ -24,6 +24,7 @@ import {
 } from "@ant-design/icons";
 import dayjs from "dayjs";
 import { getJobDesignImage } from "../utils/jobDesign";
+import { generateLayoutImage } from "../utils/layoutPreview";
 import { downloadJobPdf, generateJobPdfBlob } from "../utils/pdf";
 
 // Sub-components
@@ -228,9 +229,15 @@ export default function JobForm({
   const [pdfPreviewOpen, setPdfPreviewOpen] = useState(false);
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState("");
   const [layoutJson, setLayoutJson] = useState(null);
+  const layoutJsonRef = useRef(null);
+
+  const syncLayoutJson = useCallback((nextLayout) => {
+    layoutJsonRef.current = nextLayout;
+    setLayoutJson(nextLayout);
+  }, []);
 
   const handleLayoutChange = useCallback((nextLayout) => {
-    setLayoutJson((prevLayout) => (areJsonEqual(prevLayout, nextLayout) ? prevLayout : nextLayout));
+    layoutJsonRef.current = nextLayout;
   }, []);
 
   const isEdit = mode === "edit";
@@ -271,8 +278,8 @@ export default function JobForm({
   useEffect(() => {
     const initialValues = mapInitialData(initialData, suggestedJobNo, mode);
     form.setFieldsValue(initialValues);
-    setLayoutJson(initialValues.layout_json || null);
-  }, [form, initialData, suggestedJobNo, mode]);
+    syncLayoutJson(initialValues.layout_json || null);
+  }, [form, initialData, suggestedJobNo, mode, syncLayoutJson]);
 
   const handleCustomerChange = (customer) => {
     const location = customerLocations[customer] || "";
@@ -281,7 +288,7 @@ export default function JobForm({
 
   const handleJobModeChange = (value) => {
     if (value === "New") {
-      clearForNewJob(form, suggestedJobNo, true, setLayoutJson);
+      clearForNewJob(form, suggestedJobNo, true, syncLayoutJson);
       return;
     }
     form.setFieldsValue({ previous_job: undefined });
@@ -289,14 +296,21 @@ export default function JobForm({
 
   const handlePreviousJob = (jobId) => {
     const previousJob = jobs.find((job) => String(job.id) === String(jobId));
-    fillFromPreviousJob(form, previousJob, setLayoutJson);
+    fillFromPreviousJob(form, previousJob, syncLayoutJson);
   };
 
-  const handleFinish = (values) => {
+  const handleFinish = async (values) => {
     const sizeText = `${values.size_l || "-"} x ${values.size_b || "-"} x ${values.size_h || "-"} in`;
     const cleanColours = Array.from(new Set((values.colours || []).map((i) => String(i || "").trim()).filter(Boolean)));
     const firstPanColour = cleanColours.find((i) => i.toUpperCase().startsWith("PAN")) || "";
     const approval = isDuplicate ? "Pending" : values.approval_status;
+    const currentLayout = layoutJsonRef.current;
+    const layoutImage =
+      !currentLayout
+        ? (initialData?.layout_image || "")
+        : initialData?.layout_image && areJsonEqual(currentLayout, initialData?.layout_json)
+        ? initialData.layout_image
+        : await generateLayoutImage(currentLayout);
 
     const payload = {
       ...values,
@@ -310,9 +324,10 @@ export default function JobForm({
       status: approval === "Approved" ? "In Progress" : "Pending",
       duplicated_from: isDuplicate ? initialData?.job_no : null,
       created_at: isEdit ? initialData.created_at : new Date().toISOString().slice(0, 10),
-      layout_json: layoutJson,
+      layout_json: currentLayout,
+      layout_image: layoutImage,
     };
-    onSubmit(payload);
+    await onSubmit(payload);
   };
 
   const handleAddCustomer = async () => {
@@ -340,12 +355,19 @@ export default function JobForm({
     }
   };
 
-  const getPdfSnapshot = () => {
+  const getPdfSnapshot = async () => {
     const values = form.getFieldsValue(true);
     const sizeText = `${values.size_l || "-"} x ${values.size_b || "-"} x ${values.size_h || "-"} in`;
     const cleanColours = Array.from(new Set((values.colours || []).map((i) => String(i || "").trim()).filter(Boolean)));
     const firstPanColour = cleanColours.find((i) => i.toUpperCase().startsWith("PAN")) || "";
     const approval = isDuplicate ? "Pending" : (values.approval_status || "Pending");
+    const currentLayout = layoutJsonRef.current;
+    const layoutImage =
+      !currentLayout
+        ? (initialData?.layout_image || "")
+        : initialData?.layout_image && areJsonEqual(currentLayout, initialData?.layout_json)
+        ? initialData.layout_image
+        : await generateLayoutImage(currentLayout);
 
     return {
       ...initialData,
@@ -359,17 +381,18 @@ export default function JobForm({
       approval_status: approval,
       customer_location: values.customer_location || customerLocations[values.customer_name] || "-",
       job_no: values.job_no || suggestedJobNo,
-      layout_json: layoutJson,
+      layout_json: currentLayout,
+      layout_image: layoutImage,
     };
   };
 
-  const handleDownloadPdf = () => {
-    downloadJobPdf(getPdfSnapshot());
+  const handleDownloadPdf = async () => {
+    downloadJobPdf(await getPdfSnapshot());
     message.success("PDF downloaded");
   };
 
-  const handlePreviewPdf = () => {
-    const blob = generateJobPdfBlob(getPdfSnapshot());
+  const handlePreviewPdf = async () => {
+    const blob = generateJobPdfBlob(await getPdfSnapshot());
     const url = URL.createObjectURL(blob);
     setPdfPreviewUrl((prev) => {
       if (prev) URL.revokeObjectURL(prev);

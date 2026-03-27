@@ -14,4 +14,8 @@ export const env = {
   mongoUri: requireEnv("MONGODB_URI"),
   mongoDbName: process.env.MONGODB_DB_NAME || "kranalprints",
   clientOrigin: process.env.CLIENT_ORIGIN || "http://localhost:5173",
+  clientOrigins: String(process.env.CLIENT_ORIGIN || "http://localhost:5173")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean),
 };

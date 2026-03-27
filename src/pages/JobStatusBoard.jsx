@@ -72,8 +72,9 @@ export default function JobStatusBoard({
         title={activeJob ? `Job Details - ${activeJob.job_no}` : "Job Details"}
         open={open}
         onCancel={() => setOpen(false)}
-        width="min(1160px, calc(100vw - 24px))"
+        width="calc(100vw - 24px)"
         footer={null}
+        style={{ top: 12, paddingBottom: 12, maxWidth: "none" }}
         destroyOnHidden
         className="jobs-editor-modal"
       >

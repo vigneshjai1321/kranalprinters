@@ -5,7 +5,7 @@ const demoDesignImages = [
 ];
 
 export function getJobDesignImage(job) {
-  const imageFromData = job?.design_image || job?.designImage || "";
+  const imageFromData = job?.layout_image || job?.design_image || job?.designImage || "";
   if (imageFromData) return imageFromData;
 
   const numericId = Number(job?.id || 0);

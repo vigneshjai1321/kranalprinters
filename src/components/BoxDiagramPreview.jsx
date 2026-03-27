@@ -1,7 +1,8 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"; // Fixed ReferenceError: useCallback by adding to imports
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button, Card, Input, InputNumber, Space, Typography, Divider } from "antd";
 import { DeleteOutlined, FontSizeOutlined, LineOutlined, ReloadOutlined, DragOutlined, BorderOutlined, EditOutlined } from "@ant-design/icons";
 import PencilTool from "./PencilTool";
+import { formatDimensionText, parseMixedFraction, toMixedFraction } from "../utils/fractions";
 
 const { Text } = Typography;
 
@@ -16,39 +17,6 @@ function safeNum(value, fallback = 1) {
 
 function clamp(value, min = 0, max = 1) {
   return Math.min(max, Math.max(min, value));
-}
-
-function gcd(a, b) {
-  if (!b) return a;
-  return gcd(b, a % b);
-}
-
-function toMixedFraction(value) {
-  const num = Number(value);
-  if (!Number.isFinite(num)) return String(value || "");
-
-  const sign = num < 0 ? "-" : "";
-  const abs = Math.abs(num);
-  const whole = Math.floor(abs);
-  const fraction = abs - whole;
-
-  if (fraction < 0.0001) return `${sign}${whole}`;
-
-  const denominator = 16;
-  const roundedNumerator = Math.round(fraction * denominator);
-  if (roundedNumerator === denominator) return `${sign}${whole + 1}`;
-  if (roundedNumerator === 0) return `${sign}${whole}`;
-
-  const divisor = gcd(roundedNumerator, denominator);
-  const numerator = roundedNumerator / divisor;
-  const reducedDenominator = denominator / divisor;
-  return whole === 0 ? `${sign}${numerator}/${reducedDenominator}` : `${sign}${whole} ${numerator}/${reducedDenominator}`;
-}
-
-function formatDimensionText(rawText) {
-  const input = String(rawText || "").trim();
-  if (!input) return "";
-  return input.replace(/-?\d+\.\d+/g, (match) => toMixedFraction(match));
 }
 
 function parseCuttingSize(cuttingSize, fallbackWidth, fallbackHeight) {
@@ -207,20 +175,19 @@ export default function BoxDiagramPreview({
   const dragRef = useRef(null);
   const [layout, setLayout] = useState(null);
   const [activeTool, setActiveTool] = useState("select");
-  const [labelDraft, setLabelDraft] = useState("");
+  const [labelDraft, setLabelDraft] = useState("12 x 9 in");
+  const [labelDraftPosition, setLabelDraftPosition] = useState({ x: 50, y: 50 });
   const [selectedItem, setSelectedItem] = useState(null);
   const [draftShape, setDraftShape] = useState(null);
+  const [manualEditorValues, setManualEditorValues] = useState({});
 
   const sheet = useMemo(() => {
-    const fallbackW = safeNum(length, 18);
-    const fallbackH = Math.max(1, safeNum(breadth, 12) + safeNum(height, 0));
-    const parsed = parseCuttingSize(cuttingSize, fallbackW, fallbackH);
     return {
-      width: parsed.width,
-      height: parsed.height,
-      cuttingSize: cuttingSize || `${parsed.width} x ${parsed.height}`,
+      width: safeNum(initialLayout?.sheet?.width, 100),
+      height: safeNum(initialLayout?.sheet?.height, 70),
+      cuttingSize: initialLayout?.sheet?.cuttingSize || "",
     };
-  }, [breadth, cuttingSize, height, length]);
+  }, [initialLayout?.sheet?.cuttingSize, initialLayout?.sheet?.height, initialLayout?.sheet?.width]);
 
   const sheetRect = useMemo(() => {
     const availableWidth = SVG_VIEWBOX.width - SHEET_PADDING * 2;
@@ -249,6 +216,10 @@ export default function BoxDiagramPreview({
       return nextLayout;
     });
   }, [initialLayout, sheet]);
+
+  useEffect(() => {
+    setManualEditorValues({});
+  }, [selectedItem]);
 
   const onLayoutChangeRef = useRef(onLayoutChange);
   useEffect(() => {
@@ -309,6 +280,10 @@ export default function BoxDiagramPreview({
 
     if (activeTool === "label") {
       const text = formatDimensionText(labelDraft) || "0";
+      setLabelDraftPosition({
+        x: Number((start.x * sheet.width).toFixed(2)),
+        y: Number((start.y * sheet.height).toFixed(2)),
+      });
       const newLabel = normalizeLabel({ x: start.x, y: start.y, text });
       setLayoutSafe((prev) => ({ ...prev, labels: [...prev.labels, newLabel] }));
       setSelectedItem({ kind: "label", id: newLabel.id });
@@ -469,14 +444,16 @@ export default function BoxDiagramPreview({
 
   const selectedItemData = useMemo(() => {
     if (!layout || !selectedItem) return null;
-    if (selectedItem.kind === "line") return layout.lines.find(l => l.id === selectedItem.id);
-    if (selectedItem.kind === "box") return layout.boxes.find(b => b.id === selectedItem.id);
+    if (selectedItem.kind === "line") return layout.lines.find((l) => l.id === selectedItem.id) || null;
+    if (selectedItem.kind === "box") return layout.boxes.find((b) => b.id === selectedItem.id) || null;
+    if (selectedItem.kind === "label") return layout.labels.find((l) => l.id === selectedItem.id) || null;
     return null;
   }, [layout, selectedItem]);
 
   const updateSelectedBox = (key, value) => {
-    if (value == null || !Number.isFinite(Number(value))) return;
-    const val = clamp(Number(value) / (key === 'w' || key === 'x' ? sheet.width : sheet.height));
+    const parsed = parseMixedFraction(value);
+    if (!Number.isFinite(parsed)) return;
+    const val = clamp(parsed / (key === 'w' || key === 'x' ? sheet.width : sheet.height));
     setLayoutSafe((prev) => ({
       ...prev,
       boxes: prev.boxes.map(b => b.id === selectedItem.id ? { ...b, [key]: val } : b)
@@ -484,8 +461,8 @@ export default function BoxDiagramPreview({
   };
 
   const updateSelectedLine = (key, value) => {
-    if (value == null || !Number.isFinite(Number(value))) return;
-    const valNum = Number(value);
+    const valNum = parseMixedFraction(value);
+    if (!Number.isFinite(valNum)) return;
     const valX = clamp(valNum / sheet.width);
     const valY = clamp(valNum / sheet.height);
     setLayoutSafe((prev) => ({
@@ -517,6 +494,47 @@ export default function BoxDiagramPreview({
     }));
   };
 
+  const updateSelectedLabel = (key, value) => {
+    if (!selectedItem || selectedItem.kind !== "label") return;
+
+    setLayoutSafe((prev) => ({
+      ...prev,
+      labels: prev.labels.map((label) => {
+        if (label.id !== selectedItem.id) return label;
+
+        if (key === "text") {
+          return { ...label, text: formatDimensionText(value) };
+        }
+
+        const parsed = parseMixedFraction(value);
+        if (!Number.isFinite(parsed)) return label;
+        const normalized =
+          key === "x"
+            ? clamp(parsed / sheet.width)
+            : clamp(parsed / sheet.height);
+
+        return { ...label, [key]: normalized };
+      }),
+    }));
+  };
+
+  const selectedLineLength = useMemo(() => {
+    if (!selectedItemData || selectedItem?.kind !== "line") return 0;
+    const value = Math.hypot(
+      (selectedItemData.x2 - selectedItemData.x1) * sheet.width,
+      (selectedItemData.y2 - selectedItemData.y1) * sheet.height
+    );
+    return Number.isFinite(value) ? Number(value.toFixed(2)) : 0;
+  }, [selectedItem, selectedItemData, sheet.height, sheet.width]);
+
+  const selectedEditorTitle = useMemo(() => {
+    if (activeTool === "label" && !selectedItem) return "Text Editor";
+    if (!selectedItem) return "Direct Edit Panel";
+    if (selectedItem.kind === "box") return "Box Editor";
+    if (selectedItem.kind === "line") return "Line Editor";
+    return "Text Editor";
+  }, [activeTool, selectedItem]);
+
   return (
     <Card
       size="small"
@@ -524,23 +542,10 @@ export default function BoxDiagramPreview({
       className="diagram-card"
       extra={<Text type="secondary">{disabled ? "View only" : "Interactive Job Layout"}</Text>}
     >
-      <div className="diagram-control-grid">
-        <Space direction="vertical" size={4}>
-          <Text type="secondary">Length (L)</Text>
-          <InputNumber min={0.1} step={0.01} size="small" value={length} onChange={(value) => onLengthChange?.(value)} className="diagram-mini-input" disabled={disabled} />
-        </Space>
-        <Space direction="vertical" size={4}>
-          <Text type="secondary">Breadth (B)</Text>
-          <InputNumber min={0.1} step={0.01} size="small" value={breadth} onChange={(value) => onBreadthChange?.(value)} className="diagram-mini-input" disabled={disabled} />
-        </Space>
-        <Space direction="vertical" size={4}>
-          <Text type="secondary">Height (H)</Text>
-          <InputNumber min={0.1} step={0.01} size="small" value={height} onChange={(value) => onHeightChange?.(value)} className="diagram-mini-input" disabled={disabled} />
-        </Space>
-        <Space direction="vertical" size={4}>
-          <Text type="secondary">Cutting Size</Text>
-          <Input size="small" value={cuttingSize} placeholder="e.g., 18 x 12 in" onChange={(event) => onCuttingSizeChange?.(event.target.value)} className="diagram-mini-input" disabled={disabled} />
-        </Space>
+      <div className="diagram-help-row">
+        <Text className="diagram-status-pill is-active">1. Open edit and choose a tool</Text>
+        <Text className="diagram-status-pill">2. Draw on the sheet</Text>
+        <Text className="diagram-status-pill">3. Add text anywhere you want and save it in the PDF</Text>
       </div>
 
       <div className="diagram-toolbar" style={{ marginTop: 16 }}>
@@ -553,54 +558,227 @@ export default function BoxDiagramPreview({
           <Button icon={<DeleteOutlined />} danger disabled={!selectedItem || disabled} onClick={deleteSelected}>Delete Selected</Button>
         </div>
 
-        {selectedItemData && selectedItem.kind === "box" && (
-           <div className="diagram-toolbar-row" style={{ backgroundColor: '#f0f5ff', padding: '12px 16px', borderRadius: 4, display: 'flex', flexDirection: 'column', gap: 8 }}>
-             <Text strong style={{ whiteSpace: 'nowrap' }}>Selected Box Dimensions:</Text>
-             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 16px', alignItems: 'center' }}>
-               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                 <Text style={{ whiteSpace: 'nowrap' }}>Width:</Text>
-                 <InputNumber size="small" step={0.1} style={{ width: 80 }} value={Number.isFinite(selectedItemData.w) ? Number((selectedItemData.w * sheet.width).toFixed(2)) : 0} onChange={(v) => updateSelectedBox('w', v)} />
-               </div>
-               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                 <Text style={{ whiteSpace: 'nowrap' }}>Breadth/Height:</Text>
-                 <InputNumber size="small" step={0.1} style={{ width: 80 }} value={Number.isFinite(selectedItemData.h) ? Number((selectedItemData.h * sheet.height).toFixed(2)) : 0} onChange={(v) => updateSelectedBox('h', v)} />
-               </div>
-               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                 <Text style={{ whiteSpace: 'nowrap' }}>X Pos:</Text>
-                 <InputNumber size="small" step={0.1} style={{ width: 80 }} value={Number.isFinite(selectedItemData.x) ? Number((selectedItemData.x * sheet.width).toFixed(2)) : 0} onChange={(v) => updateSelectedBox('x', v)} />
-               </div>
-               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                 <Text style={{ whiteSpace: 'nowrap' }}>Y Pos:</Text>
-                 <InputNumber size="small" step={0.1} style={{ width: 80 }} value={Number.isFinite(selectedItemData.y) ? Number((selectedItemData.y * sheet.height).toFixed(2)) : 0} onChange={(v) => updateSelectedBox('y', v)} />
-               </div>
-             </div>
-           </div>
-        )}
-        
-        {selectedItemData && selectedItem.kind === "line" && (
-           <div className="diagram-toolbar-row" style={{ backgroundColor: '#f0f5ff', padding: '12px 16px', borderRadius: 4, display: 'flex', flexDirection: 'column', gap: 8 }}>
-             <Text strong style={{ whiteSpace: 'nowrap' }}>Selected Line Settings:</Text>
-             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 16px', alignItems: 'center' }}>
-               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                 <Text style={{ whiteSpace: 'nowrap' }}>Length:</Text>
-                 <InputNumber size="small" step={0.1} style={{ width: 80 }} 
-                   value={(() => {
-                     const val = Math.hypot((selectedItemData.x2 - selectedItemData.x1) * sheet.width, (selectedItemData.y2 - selectedItemData.y1) * sheet.height);
-                     return Number.isFinite(val) ? Number(val.toFixed(2)) : 0;
-                   })()} 
-                   onChange={(v) => updateSelectedLine('len', v)} />
-               </div>
-               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                 <Text style={{ whiteSpace: 'nowrap' }}>X Pos:</Text>
-                 <InputNumber size="small" step={0.1} style={{ width: 80 }} value={Number.isFinite(selectedItemData.x1) ? Number((Math.min(selectedItemData.x1, selectedItemData.x2) * sheet.width).toFixed(2)) : 0} onChange={(v) => updateSelectedLine('x', v)} />
-               </div>
-               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                 <Text style={{ whiteSpace: 'nowrap' }}>Y Pos:</Text>
-                 <InputNumber size="small" step={0.1} style={{ width: 80 }} value={Number.isFinite(selectedItemData.y1) ? Number((Math.min(selectedItemData.y1, selectedItemData.y2) * sheet.height).toFixed(2)) : 0} onChange={(v) => updateSelectedLine('y', v)} />
-               </div>
-             </div>
-           </div>
-        )}
+        <div className="diagram-toolbar-row">
+          <Text className="diagram-toolbar-label">Text</Text>
+          <Input
+            value={labelDraft}
+            onChange={(event) => setLabelDraft(event.target.value)}
+            placeholder="Type the dimension text you want, then click on the sheet"
+            className="diagram-label-input"
+            disabled={disabled}
+          />
+        </div>
+
+        <div className="diagram-editor-card">
+          <div className="diagram-editor-head">
+            <Text strong>{selectedEditorTitle}</Text>
+            <Text type="secondary">
+              {activeTool === "label" && !selectedItem
+                ? "Type your text and use the default X/Y values, then click on the sheet to place it."
+                : selectedItem
+                ? "Type exact values here after selecting an item in the drawing area."
+                : "Select a box, line, or text on the sheet to edit it directly."}
+            </Text>
+          </div>
+
+          {!selectedItemData && !(activeTool === "label" && !selectedItem) ? (
+            <div className="diagram-editor-empty">
+              <Text type="secondary">Nothing selected yet. Draw a box or line, then click it to edit width, breadth, position, or text.</Text>
+            </div>
+          ) : null}
+
+          {activeTool === "label" && !selectedItem ? (
+            <div className="diagram-editor-grid">
+              <div className="diagram-editor-field diagram-editor-field-wide">
+                <Text>Text</Text>
+                <Input
+                  size="middle"
+                  value={labelDraft}
+                  onChange={(event) => setLabelDraft(event.target.value)}
+                  disabled={disabled}
+                  placeholder="Type dimension text"
+                />
+              </div>
+              <div className="diagram-editor-field">
+                <Text>X Position</Text>
+                <InputNumber
+                  size="middle"
+                  min={0}
+                  step={0.1}
+                  value={labelDraftPosition.x}
+                  onChange={(value) =>
+                    setLabelDraftPosition((prev) => ({
+                      ...prev,
+                      x: Number.isFinite(Number(value)) ? Number(value) : prev.x,
+                    }))
+                  }
+                  disabled={disabled}
+                />
+              </div>
+              <div className="diagram-editor-field">
+                <Text>Y Position</Text>
+                <InputNumber
+                  size="middle"
+                  min={0}
+                  step={0.1}
+                  value={labelDraftPosition.y}
+                  onChange={(value) =>
+                    setLabelDraftPosition((prev) => ({
+                      ...prev,
+                      y: Number.isFinite(Number(value)) ? Number(value) : prev.y,
+                    }))
+                  }
+                  disabled={disabled}
+                />
+              </div>
+            </div>
+          ) : null}
+
+          {selectedItemData && selectedItem?.kind === "box" ? (
+            <div className="diagram-editor-grid">
+              <div className="diagram-editor-field">
+                <Text>Width</Text>
+                <Input
+                  size="middle"
+                  value={manualEditorValues.w || ""}
+                  placeholder={Number.isFinite(selectedItemData.w) ? toMixedFraction(Number((selectedItemData.w * sheet.width).toFixed(2))) : ""}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    setManualEditorValues((prev) => ({ ...prev, w: value }));
+                    updateSelectedBox("w", value);
+                  }}
+                  disabled={disabled}
+                />
+              </div>
+              <div className="diagram-editor-field">
+                <Text>Height</Text>
+                <Input
+                  size="middle"
+                  value={manualEditorValues.h || ""}
+                  placeholder={Number.isFinite(selectedItemData.h) ? toMixedFraction(Number((selectedItemData.h * sheet.height).toFixed(2))) : ""}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    setManualEditorValues((prev) => ({ ...prev, h: value }));
+                    updateSelectedBox("h", value);
+                  }}
+                  disabled={disabled}
+                />
+              </div>
+              <div className="diagram-editor-field">
+                <Text>X Position</Text>
+                <Input
+                  size="middle"
+                  value={manualEditorValues.x || ""}
+                  placeholder={Number.isFinite(selectedItemData.x) ? toMixedFraction(Number((selectedItemData.x * sheet.width).toFixed(2))) : ""}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    setManualEditorValues((prev) => ({ ...prev, x: value }));
+                    updateSelectedBox("x", value);
+                  }}
+                  disabled={disabled}
+                />
+              </div>
+              <div className="diagram-editor-field">
+                <Text>Y Position</Text>
+                <Input
+                  size="middle"
+                  value={manualEditorValues.y || ""}
+                  placeholder={Number.isFinite(selectedItemData.y) ? toMixedFraction(Number((selectedItemData.y * sheet.height).toFixed(2))) : ""}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    setManualEditorValues((prev) => ({ ...prev, y: value }));
+                    updateSelectedBox("y", value);
+                  }}
+                  disabled={disabled}
+                />
+              </div>
+            </div>
+          ) : null}
+
+          {selectedItemData && selectedItem?.kind === "line" ? (
+            <div className="diagram-editor-grid">
+              <div className="diagram-editor-field">
+                <Text>Length</Text>
+                <Input
+                  size="middle"
+                  value={manualEditorValues.len || ""}
+                  placeholder={toMixedFraction(selectedLineLength)}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    setManualEditorValues((prev) => ({ ...prev, len: value }));
+                    updateSelectedLine("len", value);
+                  }}
+                  disabled={disabled}
+                />
+              </div>
+              <div className="diagram-editor-field">
+                <Text>X Position</Text>
+                <Input
+                  size="middle"
+                  value={manualEditorValues.x || ""}
+                  placeholder={Number.isFinite(selectedItemData.x1) ? toMixedFraction(Number((Math.min(selectedItemData.x1, selectedItemData.x2) * sheet.width).toFixed(2))) : ""}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    setManualEditorValues((prev) => ({ ...prev, x: value }));
+                    updateSelectedLine("x", value);
+                  }}
+                  disabled={disabled}
+                />
+              </div>
+              <div className="diagram-editor-field">
+                <Text>Y Position</Text>
+                <Input
+                  size="middle"
+                  value={manualEditorValues.y || ""}
+                  placeholder={Number.isFinite(selectedItemData.y1) ? toMixedFraction(Number((Math.min(selectedItemData.y1, selectedItemData.y2) * sheet.height).toFixed(2))) : ""}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    setManualEditorValues((prev) => ({ ...prev, y: value }));
+                    updateSelectedLine("y", value);
+                  }}
+                  disabled={disabled}
+                />
+              </div>
+            </div>
+          ) : null}
+
+          {selectedItemData && selectedItem?.kind === "label" ? (
+            <div className="diagram-editor-grid">
+              <div className="diagram-editor-field diagram-editor-field-wide">
+                <Text>Text</Text>
+                <Input
+                  size="middle"
+                  value={selectedItemData.text || ""}
+                  onChange={(event) => updateSelectedLabel("text", event.target.value)}
+                  disabled={disabled}
+                  placeholder="Type dimension text"
+                />
+              </div>
+              <div className="diagram-editor-field">
+                <Text>X Position</Text>
+                <InputNumber
+                  size="middle"
+                  min={0}
+                  step={0.1}
+                  value={Number.isFinite(selectedItemData.x) ? Number((selectedItemData.x * sheet.width).toFixed(2)) : 0}
+                  onChange={(v) => updateSelectedLabel("x", v)}
+                  disabled={disabled}
+                />
+              </div>
+              <div className="diagram-editor-field">
+                <Text>Y Position</Text>
+                <InputNumber
+                  size="middle"
+                  min={0}
+                  step={0.1}
+                  value={Number.isFinite(selectedItemData.y) ? Number((selectedItemData.y * sheet.height).toFixed(2)) : 0}
+                  onChange={(v) => updateSelectedLabel("y", v)}
+                  disabled={disabled}
+                />
+              </div>
+            </div>
+          ) : null}
+        </div>
       </div>
 
       <div className="diagram-canvas-wrap" style={{ position: 'relative', cursor: activeTool === 'select' ? 'default' : 'crosshair', marginTop: 12 }}>
@@ -652,9 +830,6 @@ export default function BoxDiagramPreview({
                     }}
                   />
                 )}
-                <text x={p.x + p.w/2} y={p.y + p.h/2} textAnchor="middle" alignmentBaseline="middle" fill="#1e3a8a" fontSize={11} pointerEvents="none">
-                  {((box.w * sheet.width).toFixed(1))} x {((box.h * sheet.height).toFixed(1))}
-                </text>
               </g>
             )
           })}
@@ -741,10 +916,6 @@ export default function BoxDiagramPreview({
               )}
             </g>
           )}
-
-          <text x={sheetRect.x + 6} y={sheetRect.y - 10} fill="#1f4e87" fontSize="12" fontWeight="700">
-            Cutting Size: {sheet.cuttingSize}
-          </text>
         </svg>
 
         <PencilTool 
@@ -773,6 +944,9 @@ function SelectLineType({ value, onChange, disabled }) {
       </button>
       <button type="button" className={value === "box" ? "active" : ""} onClick={() => onChange("box")} disabled={disabled} style={{ background: value==='box'?'#e6f7ff':'', border: value==='box'?'1px solid #1890ff':'1px solid #d9d9d9', padding: '4px 12px', borderRadius: 4, cursor: 'pointer' }}>
         <BorderOutlined style={{ marginRight: 6 }} /> Draw Box
+      </button>
+      <button type="button" className={value === "label" ? "active" : ""} onClick={() => onChange("label")} disabled={disabled} style={{ background: value==='label'?'#e6f7ff':'', border: value==='label'?'1px solid #1890ff':'1px solid #d9d9d9', padding: '4px 12px', borderRadius: 4, cursor: 'pointer' }}>
+        <FontSizeOutlined style={{ marginRight: 6 }} /> Text
       </button>
     </div>
   );

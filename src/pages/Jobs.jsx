@@ -460,9 +460,9 @@ export default function Jobs({
         title={modalTitle}
         open={open}
         onCancel={closeModal}
-        width="min(1160px, calc(100vw - 24px))"
+        width="calc(100vw - 24px)"
         footer={null}
-        centered
+        style={{ top: 12, paddingBottom: 12, maxWidth: "none" }}
         destroyOnHidden
         className="jobs-editor-modal"
       >

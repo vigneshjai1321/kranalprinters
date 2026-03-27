@@ -1,8 +1,11 @@
 import React from "react";
 import { Card, Col, Form, Input, InputNumber, Row, Select, Space } from "antd";
 import { ScissorOutlined } from "@ant-design/icons";
+import { formatDimensionText, parseMixedFraction, toMixedFraction } from "../../utils/fractions";
 
 const SizeCuttingSection = ({ isEdit, isReadOnly }) => {
+  const form = Form.useFormInstance();
+
   return (
     <Card title={<Space><ScissorOutlined /> Size & Cutting</Space>} className="form-section-card">
       <Row gutter={16}>
@@ -29,22 +32,57 @@ const SizeCuttingSection = ({ isEdit, isReadOnly }) => {
       <Row gutter={16}>
         <Col xs={24} md={6}>
           <Form.Item label="Size L" name="size_l" rules={[{ required: true, message: "L required" }]}>
-            <InputNumber min={0.1} step={0.1} style={{ width: "100%" }} />
+            <InputNumber
+              min={0.1}
+              step={0.1}
+              style={{ width: "100%" }}
+              formatter={(value) => (value === undefined || value === null || value === "" ? "" : toMixedFraction(value))}
+              parser={(value) => {
+                const parsed = parseMixedFraction(value);
+                return Number.isFinite(parsed) ? String(parsed) : "";
+              }}
+            />
           </Form.Item>
         </Col>
         <Col xs={24} md={6}>
           <Form.Item label="Size B" name="size_b" rules={[{ required: true, message: "B required" }]}>
-            <InputNumber min={0.1} step={0.1} style={{ width: "100%" }} />
+            <InputNumber
+              min={0.1}
+              step={0.1}
+              style={{ width: "100%" }}
+              formatter={(value) => (value === undefined || value === null || value === "" ? "" : toMixedFraction(value))}
+              parser={(value) => {
+                const parsed = parseMixedFraction(value);
+                return Number.isFinite(parsed) ? String(parsed) : "";
+              }}
+            />
           </Form.Item>
         </Col>
         <Col xs={24} md={6}>
           <Form.Item label="Size" name="size_h" rules={[{ required: true, message: "Size required" }]}>
-            <InputNumber min={0.1} step={0.1} style={{ width: "100%" }} />
+            <InputNumber
+              min={0.1}
+              step={0.1}
+              style={{ width: "100%" }}
+              formatter={(value) => (value === undefined || value === null || value === "" ? "" : toMixedFraction(value))}
+              parser={(value) => {
+                const parsed = parseMixedFraction(value);
+                return Number.isFinite(parsed) ? String(parsed) : "";
+              }}
+            />
           </Form.Item>
         </Col>
         <Col xs={24} md={6}>
           <Form.Item label="Cutting Size" name="cutting_size" rules={[{ required: true, message: "Enter cutting size" }]}>
-            <Input placeholder="e.g., 18 x 12 in" />
+            <Input
+              placeholder="e.g., 18 x 12 in"
+              onBlur={(event) => {
+                const nextValue = formatDimensionText(event.target.value);
+                if (nextValue !== event.target.value) {
+                  form.setFieldsValue({ cutting_size: nextValue });
+                }
+              }}
+            />
           </Form.Item>
         </Col>
       </Row>

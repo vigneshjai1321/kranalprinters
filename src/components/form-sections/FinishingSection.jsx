@@ -63,7 +63,7 @@ const FinishingSection = () => {
           <div className="finishing-group-card">
             <Text className="finishing-group-title">Core Processes</Text>
             <Form.Item name="processes" className="finishing-item" style={{ marginBottom: 0 }}>
-              <Checkbox.Group options={processOptions} className="finishing-choice-grid" />
+              <Checkbox.Group options={processOptions} className="finishing-choice-grid finishing-choice-grid-horizontal" />
             </Form.Item>
           </div>
         </Col>
